@@ -264,3 +264,32 @@ Two things follow, and both matter:
 2. **`exec_custom_start` runs before `boot_fw`.** User code runs before the
    application starts — which is exactly the ordering the [version-gate
    patch](davega-x.md#can-you-patch-the-version-gate-itself) needs to work.
+
+## The pack is 12s4p, and the cautious limit was the right one
+
+Battery current was set to **30 A / -8 A per side** (60 / -16 total) while the
+pack size was unconfirmed, rather than the 45 / -12 a 6P pack would allow. The
+reasoning was asymmetric risk: if the pack were 6P, 30 A/side costs only
+top-end power; if it were 4P, 45 A/side would be roughly 22.5 A per cell against
+a ~15 A rated cell.
+
+The pack is **12s4p**. Running the formula for 4P:
+
+```
+battery max   = (4 x 15) / 2 = 30 A per side
+battery regen = (4 x -4) / 2 = -8 A per side
+```
+
+Which is exactly what was already set. The conservative choice was not merely
+safe, it was correct — and the 45 A/side figure would have been a real
+over-draw, not a theoretical one.
+
+Two independent things pointed at 4P before it was confirmed. The DAVEGA's own
+`battery_mah` was **17000** — the 4P number — and had been set before any of
+this work started, so it was not contaminated by our guess. Meanwhile the ESC's
+`si_battery_ah` had been set to 25.5 from an assumption made in the same
+session. When a device you have not touched disagrees with a value you entered
+yourself, the device is usually the better witness.
+
+`si_battery_ah` is now 17 on both sides. It affects range and consumption
+reporting only; the current limits were already right.

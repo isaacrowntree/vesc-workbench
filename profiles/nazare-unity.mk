@@ -6,7 +6,7 @@
 # Motors  dual 6389 190kv, hall sensored
 # Drive   LaCroix Falcon gear drive, 4.2:1
 # Wheels  8" / 200mm pneumatic on Hyper rims
-# Battery 12s6p Sanyo NCR20700B (~25.5 Ah, 1089 Wh)
+# Battery 12s4p Sanyo NCR20700B (~17 Ah, 726 Wh) - confirmed
 # Remote  Hoyt Puck (PPM, 3 modes)
 # Display DAVEGA X firmware 5.06 (UART, 115200)
 
@@ -19,12 +19,14 @@ CANID ?= 124             # second motor thread
 # so choosing 4 takes the PPM decoder down with it and you lose throttle.
 APP_TO_USE ?= 1
 
-# Battery current is deliberately conservative: 30 A / -8 A per side (60 / -16
-# total) rather than the 45 / -12 the 12s6p formula gives, because the pack size
-# is not confirmed from a label. If it is 6P, 45 A/side is exactly at cell spec
-# and 30 costs only top-end power. If it is 4P, 45 A/side is ~22.5 A per cell
-# against a ~15 A rated cell. Low-speed torque is unaffected either way - that
-# comes from motor current, which stays at 80 A/side.
+# Battery current: 30 A / -8 A per side (60 / -16 total), which is exactly
+# what the 4P formula gives. This was originally set conservatively while the
+# pack size was unconfirmed, on the reasoning that being wrong towards 4P was
+# survivable and being wrong towards 6P was not. The pack turned out to be 4P,
+# so the cautious number was also the correct one - no change needed.
 #
 #   battery max   = (parallel groups x 15) / 2     (dual motor, per ESC)
 #   battery regen = (parallel groups x -4) / 2
+#
+# Motor current stays at 80 A/side; low-speed torque comes from there and is
+# unaffected by pack configuration.

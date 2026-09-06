@@ -170,3 +170,39 @@ The stored PPM calibration (1.185 / 1.501 / 1.962 ms) was almost certainly done 
 | PPM calibration | VX1-era | **re-run with Puck** |
 | l_abs_current_max | 400 | leave |
 | regen cut | 1000/1100 | leave (optional 50.4/51.5) |
+
+### 2026-09-06 — pack size resolved: 12s4p
+
+Confirmed by Isaac. This closes the ⚠️ above, and reverses one of the research
+conclusions recorded on 2026-09-04.
+
+**The forum research was wrong for this board.** "12s4p / 726 Wh was the Jaws,
+never the Nazaré" is true of factory Nazaré builds; it is not true of this one.
+Model-level research tells you what shipped, not what is in the deck in front of
+you.
+
+**Two signals pointed at 4P and both were discounted:**
+
+- The ESC's original `si_battery_ah` was **17** — noted at the time as
+  "4P-shaped" and overridden anyway, in favour of a belief.
+- The DAVEGA's `battery_mah` was **17000**, set long before this work started
+  and therefore uncontaminated by it. Nobody read it until today.
+
+Two devices, neither touched by us, agreeing on the 4P number. The lesson is
+cheap to state and was expensive here: when hardware you have not configured
+disagrees with a value you entered from memory, the hardware is the better
+witness.
+
+**What it changes:**
+
+| | |
+|---|---|
+| `si_battery_ah` | 25.5 → **17**, both sides (display and range only) |
+| `l_in_current_max` | **30 A/side stays** — `(4 x 15) / 2` is exactly 30 |
+| `l_in_current_min` | **−8 A/side stays** — `(4 x -4) / 2` is exactly −8 |
+| Motor current | **80 A/side unchanged** — independent of pack configuration |
+
+The conservative limits chosen while the pack was unknown turn out to be the
+correct limits for 4P. Had we followed the 6P belief to 45 A/side, that would
+have been ~22.5 A per cell against a ~15 A rated cell — a real over-draw on
+every hard pull, not a theoretical one.
