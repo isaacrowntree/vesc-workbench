@@ -74,3 +74,31 @@ def temp_color(t, start, end):
 
 def power_color(amps, limit):
     return ramp(POWER_RAMP, (amps + limit) / (2.0 * max(1.0, limit)))
+
+
+# -- contrast ---------------------------------------------------------------
+# A dash is read in daylight, at speed, through sunglasses, while it vibrates.
+# Grey-on-black is unreadable in those conditions no matter how good it looks
+# on a monitor, so contrast is a hard constraint here rather than a taste.
+
+def luminance(c):
+    """WCAG relative luminance of an RGB565 colour."""
+    def chan(v):
+        v = v / 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = unpack(c)
+    return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b)
+
+
+def contrast(fg, bg):
+    """WCAG contrast ratio, 1.0 (invisible) to 21.0 (black on white)."""
+    a, b = luminance(fg), luminance(bg)
+    if a < b:
+        a, b = b, a
+    return (a + 0.05) / (b + 0.05)
+
+
+# WCAG AA for large text is 3.0 and for body text 4.5. A vibrating 2.8" panel
+# in sunlight is a harsher environment than either, so:
+MIN_PRIMARY = 7.0     # speed, battery percentage - the things you must read
+MIN_LABEL = 4.5       # labels and secondary values

@@ -46,6 +46,10 @@ class Riding:
     def __init__(self, theme=None):
         self._drawn = {}
         self.t = get_theme(theme)
+        # Built once. Rebuilding the table every frame allocates a dozen
+        # tuples and closures per render, which is free on a host and is not
+        # free on an ESP32 running MicroPython.
+        self._regions = self._build_regions()
 
     # -- element painters --------------------------------------------------
 
@@ -88,6 +92,9 @@ class Riding:
     # -- layout ------------------------------------------------------------
 
     def regions(self):
+        return self._regions
+
+    def _build_regions(self):
         hot = lambda f, b: self.t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
         return (
             ("speed", MARGIN, 24, 150, 48, _speed, self._big_speed),

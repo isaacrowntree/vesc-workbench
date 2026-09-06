@@ -206,7 +206,8 @@ class WS:
             pass
 
 
-def run(host, port, password, files, exprs, quiet=False, iface=None):
+def run(host, port, password, files, exprs, quiet=False, iface=None,
+        puts=(), mkdirs=()):
     ws = WS(host, port, iface=iface)
     ws.read_until(b"Password:")
     ws.send((password + "\r\n").encode())
@@ -248,6 +249,18 @@ def run(host, port, password, files, exprs, quiet=False, iface=None):
         return True
 
     ok = True
+    for d in mkdirs:
+        execute("import os\ntry:\n    os.mkdir('%s')\nexcept OSError:\n    pass" % d,
+                "mkdir " + d)
+    for spec in puts:
+        local, _, remote = spec.partition(":")
+        ws.send(b"\x02")
+        ws.read_until(b">>>")
+        n = ws.put_file(local, remote)
+        if not quiet:
+            print("uploaded %s -> %s (%d bytes)" % (local, remote, n), file=sys.stderr)
+        ws.send(b"\x01")
+        ws.read_until(b"raw REPL")
     for path in files:
         remote = "/" + os.path.basename(path)
         ws.send(b"\x02")                # file transfer needs the normal REPL
@@ -279,16 +292,22 @@ def main():
     ap.add_argument("-e", "--eval", action="append", default=[],
                     help="expression to evaluate, repeatable")
     ap.add_argument("-q", "--quiet", action="store_true")
+    ap.add_argument("--put", action="append", default=[], metavar="LOCAL:REMOTE",
+                    help="upload a file to an exact remote path, repeatable; "
+                         "runs before -f and -e")
+    ap.add_argument("--mkdir", action="append", default=[], metavar="PATH",
+                    help="create a directory on the device if absent")
     ap.add_argument("-i", "--iface", default=os.environ.get("DAVEGA_IFACE"),
                     help="pin to an interface, e.g. en0; auto-detected if the "
                          "default route reaches the wrong host")
     a = ap.parse_args()
     if not a.password:
         ap.error("no password given (-p or WEBREPL_PASSWORD)")
-    if not a.file and not a.eval:
+    if not a.file and not a.eval and not a.put and not a.mkdir:
         a.eval = ["import sys, os; print(sys.implementation); print(os.listdir('/'))"]
     try:
-        sys.exit(run(a.host, a.port, a.password, a.file, a.eval, a.quiet, a.iface))
+        sys.exit(run(a.host, a.port, a.password, a.file, a.eval, a.quiet, a.iface,
+                     a.put, a.mkdir))
     except (IOError, TimeoutError) as e:
         sys.exit("failed: %s" % e)
 

@@ -20,6 +20,7 @@ from harness.display import Display, OutOfBounds       # noqa: E402
 from harness.telemetry import Board                    # noqa: E402
 from screens.riding import Riding                      # noqa: E402
 from screens.themes import THEMES, DEFAULT, get        # noqa: E402
+from screens.palette import contrast, MIN_PRIMARY, MIN_LABEL   # noqa: E402
 
 MOCKUPS = os.path.join(ROOT, "mockups", "themes.html")
 THEMES_PY = os.path.join(ROOT, "screens", "themes.py")
@@ -84,6 +85,24 @@ def main():
               and steady <= d.full_frame_px * BUDGET_STEADY)
         check("budget/%-11s first %.2fx  steady %.3fx"
               % (key, first / d.full_frame_px, steady / d.full_frame_px), ok)
+
+    print()
+    print("== contrast: a dash is read in sunlight, at speed, while vibrating")
+    # Grey on black looks refined on a monitor and is unreadable on a 2.8"
+    # panel outdoors. This is the constraint that keeps taste in check.
+    for key in sorted(THEMES):
+        t = THEMES[key]
+        checks = (("ink", t.ink, MIN_PRIMARY), ("accent", t.accent, MIN_LABEL),
+                  ("dim", t.dim, MIN_LABEL), ("warn", t.warn, MIN_LABEL),
+                  ("danger", t.danger, MIN_LABEL))
+        worst, worst_name, worst_min = 99.0, "", 0
+        for name, col, floor in checks:
+            r = contrast(col, t.ground)
+            if r / floor < worst / max(1, worst_min):
+                worst, worst_name, worst_min = r, name, floor
+        ok = all(contrast(c, t.ground) >= f for _, c, f in checks)
+        check("contrast/%-11s worst %s %.1f:1 (floor %.1f)"
+              % (key, worst_name, worst, worst_min), ok)
 
     print()
     print("== the mockups show the colours the device draws")

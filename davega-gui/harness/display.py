@@ -45,11 +45,11 @@ class Display:
     def reset_state(self):
         self.pixels = bytearray(self.width * self.height * 3)
         self.calls = []
-        # What the SPI bus actually pays for. On an ILI9341 a frame costs
-        # roughly two bytes per pixel touched plus a little per-window
-        # overhead, so pixels pushed - not calls made - is the number that
-        # decides whether a screen feels fast.
+        # Pixels touched. Kept because it is the honest measure of SPI
+        # traffic - but NOT the thing that decides whether a screen feels
+        # fast. See COST below.
         self.px_written = 0
+        self.chars_written = 0
         self.color = 0xFFFF
         self.bg = 0x0000
         self.pos = (0, 0)
@@ -72,6 +72,33 @@ class Display:
             raise OutOfBounds(
                 "%s at (%d,%d) size %dx%d leaves the %dx%d frame"
                 % (what, x, y, w, h, self.width, self.height))
+
+    # Measured on a DAVEGA X (ESP32, MicroPython 1.14), 100 calls each:
+    #
+    #   fill_rectangle   4x4      2.86 ms
+    #   fill_rectangle  40x40     4.74 ms
+    #   fill_rectangle 240x40    12.60 ms
+    #   set_pos + print 3 chars  25.88 ms   <- 8.6 ms PER CHARACTER
+    #   set_color                 0.13 ms
+    #
+    # So the cost is not pixels. A draw call costs ~2.7 ms of interpreter
+    # overhead whatever its size, and drawing a character costs three times
+    # that again. Pixels are close to free by comparison (~1 us each).
+    #
+    # Optimising a screen therefore means drawing fewer CHARACTERS, then
+    # making fewer CALLS - and only then worrying about area.
+    CALL_MS = 2.70          # per drawing call, any size
+    PX_MS = 0.001           # per pixel on top of that
+    CHAR_MS = 8.60          # per character drawn
+
+    @property
+    def est_ms(self):
+        """Estimated frame time on the device, from measured constants."""
+        drawing = sum(1 for n, _ in self.calls
+                      if n in ("fill_rectangle", "print", "chars", "pixel", "erase"))
+        return (drawing * self.CALL_MS
+                + self.px_written * self.PX_MS
+                + self.chars_written * self.CHAR_MS)
 
     @property
     def spi_bytes(self):
@@ -136,6 +163,7 @@ class Display:
         w = len(text) * CHAR_W * scale
         h = CHAR_H * scale
         self._bounds(x, y, w, h, "print(%r)" % text[:24])
+        self.chars_written += sum(1 for c in text if c != " ")
         for i, ch in enumerate(text):
             if ch != " ":
                 self._blit(x + i * CHAR_W * scale, y,
