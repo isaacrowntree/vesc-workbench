@@ -22,24 +22,37 @@ of its own. So the plan is sound. It is just not finished.
 
 ## What is missing
 
-### 1. Live telemetry — blocking
+### 1. Live telemetry — written, not yet run on hardware
 
-Every screen still draws an injected frame. `VescComm(uart, False)` constructs,
-the pins are tx 16 / rx 17, and `get_values(can_id)` sends — but the ESC does
-not answer.
+I spent an evening guessing at `VescComm`'s undocumented signatures. That was
+the wrong move: **the protocol is documented in the DAVEga source**, which is
+open (GPL-3.0), and reading it took ten minutes.
 
-Until this works, dropping the proxy makes the display strictly worse than it
-is today: the stock app would refuse firmware 7 and ours would show frozen
-numbers.
+`screens/vesc.py` now does the whole job itself:
 
-Untested hypotheses, cheapest first:
+```
+request  02 01 04 40 84 03      start, len, COMM_GET_VALUES, crc16, stop
+reply    02 <len> 04 <payload> <crc-hi> <crc-lo> 03
+```
 
-- `get_values` may want a **list index**, not a CAN id. `VESCS` is a list and
-  the argument is compared against an int; 0 and 1 have not been tried.
-- The **LispBM proxy owns the ESC's UART**. It answers the stock app's polling,
-  so the link works; whether it also answers an unsolicited request from a
-  second reader is unknown. `make lisp-stop` tests this reversibly.
-- The display's UART may need `swap_tx_rx` true rather than false.
+Field offsets are lifted from `vesc_comm_standard.cpp` rather than derived, and
+the tests build a reply the way an ESC would and assert every field reads back
+exactly what went in — the check that matters, because a field read from the
+wrong offset still produces a plausible number. Bad packets are refused rather
+than half-read.
+
+Two things that fell out of reading properly:
+
+- The computed CRC over the payload `[0x04]` is `0x4084`, which is exactly the
+  constant in their request packet. Independent confirmation that the framing
+  is right.
+- **A FOCBOX Unity answers with both motors in one packet**, at its own offsets,
+  which the display averages. That is a question I had left open. A Unity on
+  firmware 7 speaks the standard layout and the second motor comes over CAN,
+  which is what our proxy counters already showed.
+
+What remains is to run it against the ESC. Nothing about it is speculative any
+more; it is untested, which is a different thing.
 
 ### 2. Buttons are not wired to hardware
 
