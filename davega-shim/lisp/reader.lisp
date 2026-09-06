@@ -44,23 +44,28 @@
 
 ; Read exactly n bytes, tolerating short reads. A UART hands you what has
 ; arrived, not what you asked for; a partial read means the frame is still
-; coming, not that it is corrupt. Returns how many bytes were delivered.
+; coming, not that it is corrupt. The common case is one call, so the
+; accumulating loop is only entered when that first read comes up short.
+; Returns how many bytes were delivered.
 (defun rdn (b n off) {
-    (var got 0)
-    (var live t)
-    (loopwhile (and live (< got n)) {
-        (var k (uart-read b (- n got) (+ off got) nil 0.05))
-        (if (= k 0) (setq live nil) (setq got (+ got k)))
-    })
-    got
+    (var got (uart-read b n off nil 0.05))
+    (if (= got n) got {
+        (var live t)
+        (loopwhile (and live (< got n)) {
+            (var k (uart-read b (- n got) (+ off got) nil 0.05))
+            (if (= k 0) (setq live nil) (setq got (+ got k)))
+        })
+        got })
 })
 
 ; Read the payload and hand off a complete frame sitting in rx.
 (defun frame () {
     (var n (bufget-u8 rx 1))
+    ; payload plus crc and stop byte in one read - the length byte already
+    ; says how much is coming, so splitting it in two costs a UART call per
+    ; frame for nothing. tests/lisp/bench_reader.lisp measures the difference.
     (if (and (> n 0) (< n 100)
-             (= (rdn rx n 2) n)            ; payload
-             (= (rdn rx 3 (+ n 2)) 3))     ; crc + stop
+             (= (rdn rx (+ n 3) 2) (+ n 3)))
         (handle n)
         { (setq dbg-bad (+ dbg-bad 1)) nil })
 })

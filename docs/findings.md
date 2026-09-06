@@ -158,18 +158,34 @@ with the same display polling the same board:
 |---|---|---|---|
 | Original (one 2-byte header read, short reads ignored) | 12.3/s | 5.1/s | 5.5% |
 | Byte-at-a-time start hunt | 11.3/s | 4.5/s | 7.9% |
-| **Current** (2-byte fast path, explicit recovery) | **11.8/s** | **4.8/s** | **7.3%** |
+| 2-byte fast path, explicit recovery | 11.8/s | 4.8/s | 7.3% |
+| **Current** (as above, plus one read for the frame body) | **12.0/s** | **5.0/s** | **5.6%** |
 
 The byte-at-a-time version was correct and needlessly slow: it paid an extra
 UART call on every frame to defend against a case that happens rarely. The
 current reader keeps the single 2-byte header read as the fast path and handles
 both misalignments explicitly, recovering most of the difference.
 
-What remains - about 4% of throughput and a third more LispBM CPU - buys the
-guarantee the harness demonstrates: without it, one short read at the head of a
-stream can cost every frame behind it. At 7% CPU and an imperceptible 4.8
-updates per second, that is worth paying. The numbers are here so the trade is
-visible rather than assumed.
+The last row is the interesting one. `tests/lisp/bench_reader.lisp` runs
+candidate readers over the same wire and counts UART calls, which is what the
+interpreter actually pays for. It showed the shipped reader spending **three
+reads per frame** - header, payload, then crc and stop byte - when the length
+byte already says how much is coming. Fetching the frame body in one call takes
+that to **two reads per frame**, a third fewer:
+
+```
+A three reads   frames=20 replies=20 uart-reads=100
+B two reads     frames=20 replies=20 uart-reads=80
+C two + fast    frames=20 replies=20 uart-reads=80
+```
+
+Candidate C also skips `rdn`'s accumulating loop when the first read already
+delivered everything, which the bench cannot count but the board can: on
+hardware it came out at **5.6% CPU**, below the original unsafe reader's 5.5%
+within measurement noise, with the framing guarantees intact.
+
+So the safety did not have to cost anything. It cost something only while the
+reader was doing more UART calls than the protocol requires.
 
 Note that no desync was observed on this board either before or after:
 `dbg-bad` was 0 throughout and every answerable request was answered. The fix

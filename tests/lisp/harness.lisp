@@ -12,10 +12,13 @@
 (def wire-pos 0)             ; how many the reader has consumed
 (def caps nil)               ; queue of per-call read caps; nil = no cap
 (def replies 0)              ; frames the firmware decoder was asked to answer
+(def reads 0)                ; uart-read calls - the cost we are trying to cut
+(def bufs 0)                 ; buffers allocated in the frame path
 (def last-proc (bufcreate 128))
 
 (defun wire-reset () {
     (setq wire-len 0) (setq wire-pos 0) (setq caps nil) (setq replies 0)
+    (setq reads 0) (setq bufs 0)
 })
 
 ; Append a framed packet to the stream.
@@ -33,6 +36,7 @@
 ; Stand-in for the VESC uart-read: (uart-read buf n offset stop timeout).
 ; Returns how many bytes it actually delivered, like the real one does.
 (defun uart-read (b n off stop tmo) {
+    (setq reads (+ reads 1))
     (var want n)
     (var c (take-cap))
     (if (not (eq c nil)) (if (< c want) (setq want c)))
@@ -48,6 +52,7 @@
 ; The firmware decoder: record that a reply was owed, and for whom.
 (defun cmds-proc (b) {
     (setq replies (+ replies 1))
+    (setq bufs (+ bufs 1))
     (bufcpy last-proc 0 b 0 (buflen b))
     t
 })

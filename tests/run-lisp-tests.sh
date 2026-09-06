@@ -42,11 +42,16 @@ cat tests/lisp/stubs.lisp build/proxy-sub.lisp davega-shim/lisp/reader.lisp \
     tests/lisp/frames.lisp tests/lisp/harness.lisp tests/lisp/test_reader.lisp \
     > build/reader-test-bundle.lisp
 
+# reader cost bench: same wire, different read strategies
+cat tests/lisp/stubs.lisp build/proxy-sub.lisp davega-shim/lisp/reader.lisp \
+    tests/lisp/frames.lisp tests/lisp/harness.lisp tests/lisp/bench_reader.lisp \
+    > build/reader-bench-bundle.lisp
+
 fail=0
-for b in lisp-test-bundle min-test-bundle proxy-test-bundle reader-test-bundle; do
+for b in lisp-test-bundle min-test-bundle proxy-test-bundle reader-test-bundle reader-bench-bundle; do
   echo "--- $b"
   out=$(docker run --rm -v "$PWD/build:/work" "$IMG" \
-        repl --terminate --src "/work/$b.lisp" 2>&1) || true
+        repl --terminate -H 2097152 -M 262144 --src "/work/$b.lisp" 2>&1) || true
   echo "$out" | grep -E '  (PASS|FAIL)|passed|FAILED' || echo "$out" | tail -5
   echo "$out" | grep -q "all lisp tests passed" || { echo "FAILED: $b" >&2; fail=1; }
 done
