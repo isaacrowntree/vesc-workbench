@@ -52,8 +52,11 @@ Item {
         var tc = g(m, "tc-events")
         console.log("traction control: " + (tc === 0 ? "never engaged" : tc + " engagements")
                     + ", worst wheel difference " + g(m, "tc-worst").toFixed(0) + " erpm")
-        if (g(m, "tc-worst") === 0)
-            console.log("  (0 means the second motor could not be read, not no slip)")
+        if (g(m, "tc-worst") === 0 && g(m, "hi-erpm") > 0)
+            console.log("  (0 with the wheels having turned means the second"
+                        + " motor could not be read, not that there was no slip)")
+        VescIf.disconnectPort()
+        Qt.quit()
     }
 
     Component.onCompleted: { log("connecting"); VescIf.connectTcp(host, port) }
