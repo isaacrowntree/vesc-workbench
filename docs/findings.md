@@ -30,6 +30,12 @@ config write brings it back. On a skateboard that is a dead throttle.
 It also explains a symptom that is easy to misdiagnose: config writes appearing
 not to persist. They persisted fine — the next `uart-start` overwrote them.
 
+> **Now live again.** With the DAVEGA proxy retired, `app_to_use` is back to
+> **4 (PPM and UART)** so the ESC answers telemetry with its own firmware
+> rather than through a Lisp shim. That re-arms this hazard: any LispBM script
+> that calls `uart-start` will silently kill the throttle. The flight recorder
+> does not touch the UART, and the guard below still stands.
+>
 > **Handled.** `make upload-lisp` checks the script for `uart-start` and reads
 > `app_to_use` before uploading. The firmware is going to clear that value
 > either way, so the tooling moves it somewhere sane first: **4 → 1** (PPM only)
@@ -293,3 +299,23 @@ yourself, the device is usually the better witness.
 
 `si_battery_ah` is now 17 on both sides. It affects range and consumption
 reporting only; the current limits were already right.
+
+## The 70-byte truncation was ours, not the ESC's
+
+For a while the display could read the ESC but every reply arrived truncated at
+70 of its 79 bytes, so the CRC could not be checked. The proxy looked guilty
+and was, though not in the way expected.
+
+Stopping it did not fix the truncation - it removed the replies entirely. Zero
+bytes, not 70. Because `app_to_use` was **1 (PPM only)**, set months earlier
+precisely so the LispBM proxy could own the UART, **nothing on the ESC was
+listening to that port at all**. The 70 bytes had never come from the firmware;
+they were the proxy answering, and truncating in its own reply path.
+
+The fix is `app_to_use = 4`, so the ESC's own UART comms answer. Two things
+made that safe only now: the proxy is gone, and the flight recorder that
+replaced it never calls `uart-start`.
+
+Worth noting how the write behaved: setting `app_to_use` alone read back as
+unchanged, and setting it alongside a second field a moment later stuck. The
+value was not being rejected - the read-back was racing the store.

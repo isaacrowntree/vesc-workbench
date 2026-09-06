@@ -254,6 +254,9 @@ endif
 dual-check: check
 	$(call run_qml,dual-check)
 
+set-app: check
+	$(call run_qml,set-app)
+
 faults: check
 	$(call run_qml,faults)
 
