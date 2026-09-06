@@ -8,6 +8,13 @@ and what you can do to it directly.
 > is about your own hardware. Nothing here is redistributable and none of it is
 > supported by anybody.
 
+> [!WARNING]
+> **Everything on this page was derived from the published firmware images and
+> the vendor's own installer — not from a running device.** The two scripts in
+> `davega-shim/webrepl/` have never been executed on a DAVEGA. They are written
+> against what the firmware images say, and your device is the authority. Run
+> `recon()` first, `backup()` before any write, and expect to correct this page.
+
 ## Hardware
 
 From the (now closed) shop listing and the firmware image itself:

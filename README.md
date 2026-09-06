@@ -201,6 +201,7 @@ and packs get damaged. Run the detection wizard.
 | DAVEGA version gate bypass | ✅ telemetry live on a Unity, FW 7.00 |
 | `COMM_FORWARD_CAN` to a second motor | ⚠️ unverified — [known issues](docs/known-issues.md) |
 | Hardware tested | FOCBOX Unity only |
+| DAVEGA X WebREPL scripts | ⚠️ written from the firmware images, never run on a device — [docs](docs/davega-x.md) |
 
 ## Safety
 
