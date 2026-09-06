@@ -142,18 +142,50 @@ record of the stock device you are going to get.
 
 ## Can you patch the version gate itself?
 
-Maybe, and this is the prize: if it worked, the shim becomes unnecessary.
+Maybe — and if it works, the shim becomes unnecessary.
 
-The obstacle is that `frozen.*` modules are compiled into the firmware image at
-build time, so you cannot edit their source on the device. But you do not
-necessarily need to. `start.py` is ordinary filesystem code that runs at boot,
-and MicroPython lets you rebind attributes on an imported module. If the gate
-compares against a module-level constant, setting that constant from `start.py`
-before the main app reads it is a legitimate fix — no firmware build, no
-flashing, reversible by deleting one file.
+The v5.06 image names the gate outright. Two functions sit in
+**`frozen/run_standard.py`**:
 
-Whether it is actually reachable that way depends entirely on how the check is
-written, which `probe()` and `find_version_gate()` are there to answer.
+```
+is_compatible_vesc_version
+assert_compatible_vesc_version
+```
+
+alongside `is_vesc`, `has_vesc_restarted`, `scan_vescs` and `vesc_fault_alarm`.
+The refusal is not buried in an expression somewhere; it has a name.
+
+Frozen modules are compiled into the firmware image, so their source cannot be
+edited on the device. But it does not need to be. MicroPython resolves a
+module-level call through the module's globals **at call time**, so rebinding
+the attribute before the app calls it should take effect:
+
+```python
+import frozen.run_standard as rs
+rs.is_compatible_vesc_version = lambda *a, **k: True
+rs.assert_compatible_vesc_version = lambda *a, **k: None
+```
+
+`davega-shim/webrepl/start.py` is that, with the failure handling. The firmware
+has executed a user `start.py` at boot since v5.03 — that is how
+[sn8ke](https://github.com/janpom/sn8ke) hooks in, and sn8ke falls through to
+the normal app when its button is not held, which is the behaviour this depends
+on.
+
+**This is untested.** It fails in three ways, all of them harmless:
+
+- `start.py` may run after `run_standard` has already decided;
+- the caller may hold its own reference (`from ... import ...`), so patching the
+  module changes nothing;
+- the names may differ on your firmware.
+
+Each of those is a no-op rather than a brick, and the file catches its own
+exceptions so a failed patch cannot stop the display booting. Check the ground
+truth first with `probe('frozen.run_standard')` from `recon.py`.
+
+Before relying on any of it, confirm on your own device that holding UP+DOWN
+still reaches WebREPL **with `start.py` present** — that is the escape hatch
+that makes this reversible.
 
 ## Can you build and flash your own firmware?
 
