@@ -168,3 +168,41 @@ sane, the XML path handles it.
 Why it matters: `ctrl_type = 0` leaves the remote decoding but never driving the
 motors, which presents as a dead throttle, and in that state you cannot configure
 your way out through the normal path.
+
+## Traction control does NOT affect braking (correcting common advice)
+
+A widely repeated warning is that VESC traction control is dangerous under
+braking because "if one wheel stops spinning, they all stop spinning". For the
+**PPM app** that is not what the firmware does. From `applications/app_ppm.c`:
+
+```c
+if (current_mode_brake) {
+    mc_interface_set_brake_current(fabsf(current));
+    comm_can_set_current_brake_rel(msg->id, fabsf(servo_val));   // no TC
+} else {
+    ... traction control lives entirely in this branch ...
+}
+```
+
+TC sits exclusively in the non-brake branch, so braking is unaffected. It also
+disengages itself on any fault and only re-engages once wheel speeds converge:
+
+```c
+if (mc_interface_get_fault() != FAULT_CODE_NONE) { autoTCdisengaged = true; }
+```
+
+What TC actually does is taper drive current linearly, reaching **zero** current
+at `tc_max_diff`:
+
+```c
+current_out = utils_map(diff, 0.0, config.tc_max_diff, current, 0.0);
+```
+
+So `tc_max_diff` is a wheel-speed *difference* in ERPM at which that motor is cut
+entirely. Convert it for your board before choosing a value:
+
+    km/h = tc_max_diff / pole_pairs / gear_ratio * pi * wheel_dia * 60 / 1000
+
+On the reference board (7 pole pairs, 4.2:1, 0.2 m) the default 3000 is only
+~3.8 km/h, which is tight for surfaces where some slip is normal - the symptom is
+power surging, not a crash. 6000 (~7.7 km/h) is the value in use here for grass.
