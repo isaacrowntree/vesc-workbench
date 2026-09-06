@@ -118,6 +118,24 @@ target over frames. Both are covered by tests: ramps must stay inside RGB565,
 and an animation must stay inside the per-frame bus budget *and* land
 pixel-identical to a static render of its end value.
 
+## Themes
+
+Ten themes, each a palette plus a layout name — `screens/themes.py`. Mockups of
+all ten at true device size are in [mockups/themes.html](mockups/themes.html);
+open it in a browser.
+
+```sh
+make davega-theme THEME=nazare    # writes /data/config.json on the display
+```
+
+`nazare` is the default: the best idea from each of the other nine and nothing
+else. Every theme goes through the same harness as the default —
+`tests/test_themes.py` renders all nine envelope frames per theme, asserts the
+differential path matches a full repaint across all 81 transitions, and holds
+each to the drawing budget. It also checks every colour declared in
+`themes.py` appears in the mockups, so the pictures cannot drift from what the
+device draws.
+
 ## Status
 
 The harness is real and tested; `riding.py` is a deliberate port of the stock

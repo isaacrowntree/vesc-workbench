@@ -13,13 +13,8 @@ the optimisation safe to trust.
 """
 
 from . import widgets
+from .themes import get as get_theme
 
-BLACK = 0x0000
-WHITE = 0xFFFF
-GREY = 0x8410
-RED = 0xF800
-AMBER = 0xFD20
-GREEN = 0x07E0
 
 W, H = 240, 320
 MARGIN = 6
@@ -48,32 +43,32 @@ def _volts(f, b):
 class Riding:
     """Regions are (key, x, y, w, h, value_fn, draw_fn)."""
 
-    def __init__(self):
+    def __init__(self, theme=None):
         self._drawn = {}
+        self.t = get_theme(theme)
 
     # -- element painters --------------------------------------------------
 
     def _big_speed(self, d, f, b, v):
         widgets.text(d, MARGIN, 24, self._drawn.get("speed"), v,
-                     scale=6, color=WHITE, bg=BLACK)
+                     scale=6, color=self.t.ink, bg=self.t.ground)
 
     def _bar(self, d, f, b, v):
         bar_w = W - 2 * MARGIN
-        d.fill_rectangle(MARGIN, 96, bar_w, 18, GREY)
+        d.fill_rectangle(MARGIN, 96, bar_w, 18, self.t.track)
         if v:
-            pct = v / bar_w
-            col = GREEN if pct > 0.5 else AMBER if pct > 0.2 else RED
-            d.fill_rectangle(MARGIN, 96, v, 18, col)
+            d.fill_rectangle(MARGIN, 96, v, 18, self.t.soc_color(v / bar_w))
 
     def _volts_line(self, d, f, b, v):
         widgets.text(d, MARGIN, 120, self._drawn.get("volts"), v,
-                     color=WHITE, bg=BLACK)
+                     color=self.t.ink, bg=self.t.ground)
 
-    def _cell(self, key, x, y, color=lambda f, b: WHITE):
+    def _cell(self, key, x, y, color=None):
         """The label is static furniture; only the value is ever redrawn."""
         def paint(d, f, b, v):
+            col = color(f, b) if color else self.t.ink
             widgets.text(d, x, y + 12, self._drawn.get(key), v,
-                         scale=2, color=color(f, b), bg=BLACK)
+                         scale=2, color=col, bg=self.t.ground)
         return paint
 
     def _fault(self, d, f, b, v):
@@ -82,18 +77,18 @@ class Riding:
         # glass after the ESC has recovered, which is worse than never
         # showing it.
         if not v:
-            d.set_color(BLACK, BLACK)
-            d.fill_rectangle(0, 272, W, 24, BLACK)
+            d.set_color(self.t.ground, self.t.ground)
+            d.fill_rectangle(0, 272, W, 24, self.t.ground)
             return
-        d.set_color(WHITE, RED)
-        d.fill_rectangle(0, 272, W, 24, RED)
+        d.set_color(self.t.ink, self.t.danger)
+        d.fill_rectangle(0, 272, W, 24, self.t.danger)
         d.set_pos(MARGIN, 280)
         d.print(v)
 
     # -- layout ------------------------------------------------------------
 
     def regions(self):
-        hot = lambda f, b: RED if f.temp_fet_filtered >= b.temp_derate_start else WHITE
+        hot = lambda f, b: self.t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
         return (
             ("speed", MARGIN, 24, 150, 48, _speed, self._big_speed),
             ("bar", MARGIN, 96, W - 2 * MARGIN, 18, _bar_fill, self._bar),
@@ -118,12 +113,12 @@ class Riding:
     def chrome(self, d):
         """Static furniture. Painted once, then never touched again - it is
         the part of the screen that cannot change."""
-        d.set_color(GREY, BLACK)
+        d.set_color(self.t.dim, self.t.ground)
         d.set_pos(MARGIN + 150, 60)
         d.print("km/h")
         for label, x, y in (("MOTOR A", MARGIN, 148), ("BATT A", MARGIN + HALF, 148),
                             ("FET C", MARGIN, 208), ("USED Ah", MARGIN + HALF, 208)):
-            d.set_color(GREY, BLACK)
+            d.set_color(self.t.dim, self.t.ground)
             d.set_pos(x, y)
             d.print(label)
 
@@ -131,7 +126,7 @@ class Riding:
 
     def render(self, d, f, b, full=False):
         if full or not self._drawn:
-            d.set_color(WHITE, BLACK)
+            d.set_color(self.t.ink, self.t.ground)
             d.erase()
             self._drawn = {}
             self.chrome(d)
@@ -147,6 +142,6 @@ class Riding:
             self._drawn[key] = v
 
 
-def render(d, frame, board):
+def render(d, frame, board, theme=None):
     """One-shot full repaint. Kept for callers that do not hold state."""
-    Riding().render(d, frame, board, full=True)
+    Riding(theme).render(d, frame, board, full=True)

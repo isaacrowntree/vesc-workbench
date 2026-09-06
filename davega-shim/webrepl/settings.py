@@ -69,6 +69,26 @@ def update(**kw):
     return cfg
 
 
+def set_theme(name):
+    """Select a davega-gui theme.
+
+    `theme` is our key, not the stock firmware's, so unlike update() this is
+    allowed to create it. The stock app ignores keys it does not know.
+    """
+    import ujson
+    cfg = _load()
+    before = cfg.get("theme", "<unset>")
+    cfg["theme"] = name
+    with open(CONFIG, "w") as f:
+        ujson.dump(cfg, f)
+    print("theme %s -> %s (reboot to apply)" % (before, name))
+    return name
+
+
+def get_theme():
+    return _load().get("theme", "<unset>")
+
+
 # Keys seen in the v5.01-v5.07rc3 firmware images. Present for orientation
 # only: run show() to see what your firmware really has, and treat any
 # difference as the firmware being right.

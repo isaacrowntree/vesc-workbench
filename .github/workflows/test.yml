@@ -11,6 +11,8 @@ jobs:
         run: cd davega-shim && python3 test_shim.py && python3 test_layout.py
       - name: DAVEGA screen tests - golden images, draw budget, field sweeps
         run: python3 davega-gui/tests/test_screens.py
+      - name: DAVEGA theme tests - every theme through the same harness
+        run: python3 davega-gui/tests/test_themes.py
 
   lisp:
     runs-on: ubuntu-latest

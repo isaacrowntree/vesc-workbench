@@ -61,6 +61,7 @@ help:
 	@echo "  make davega-recon   - read-only device recon over WebREPL"
 	@echo "  make davega-settings- print /config.json"
 	@echo "  make davega-gate    - inspect the version gate in frozen.run_standard"
+	@echo "  make davega-theme THEME=nazare - choose a dash theme"
 	@echo "  (the three above need WEBREPL_PASSWORD=xxxx and this machine on its AP)"
 	@echo ""
 	@echo "Offline:"
@@ -80,6 +81,7 @@ test-py:
 
 gui-test:
 	@python3 davega-gui/tests/test_screens.py
+	@python3 davega-gui/tests/test_themes.py
 
 gui-golden:
 	@python3 davega-gui/tests/test_screens.py --update-golden
@@ -182,6 +184,10 @@ $(WEBREPL):
 # Needs this machine joined to the DAVEGA's AP, and its WebREPL password:
 #   make davega-recon WEBREPL_PASSWORD=xxxx
 DAVEGA_HOST ?= 192.168.4.1
+# The display's WebREPL password. Not a secret - the vendor publishes it on
+# davega.eu/sn8ke ("davega" reversed). Override if you have changed it.
+WEBREPL_PASSWORD ?= agevad
+export WEBREPL_PASSWORD
 
 davega-recon:
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
@@ -190,6 +196,12 @@ davega-recon:
 davega-settings:
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
 	  -f davega-shim/webrepl/settings.py -e "show()"
+
+# Select a davega-gui theme. Names come from davega-gui/screens/themes.py.
+davega-theme:
+	@test -n "$(THEME)" || { echo "usage: make davega-theme THEME=nazare"; exit 1; }
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega-shim/webrepl/settings.py -e "set_theme('$(THEME)')"
 
 davega-gate:
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
