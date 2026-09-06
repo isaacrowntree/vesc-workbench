@@ -26,6 +26,13 @@ UPDATE = "--update-golden" in sys.argv
 # feels laggy. Kept low deliberately: the number is the design constraint.
 BUDGET = {"fill_rectangle": 24, "print": 24, "total": 120}
 
+# Budgets in milliseconds, from constants measured on the panel. Pixels were
+# the wrong proxy: a draw call costs ~2.7 ms whatever its size and a character
+# ~8.6 ms, so time is what a screen is actually spending.
+FULL_MS = 900
+SETTLED_MS = 120
+ANIMATION_MS = 60          # every frame of a tween, so motion stays smooth
+
 # Pixels pushed, which is what the SPI bus is actually billed for. A full
 # repaint is allowed to be expensive; a steady-state frame, where usually one
 # digit moved, is not. 8% of the frame is generous and still ~14x cheaper than
@@ -114,9 +121,9 @@ def main():
     screen = Riding()
     screen.render(d, board.nominal(), board)
     first = d.px_written
-    check("first paint %d px (%.2fx frame) <= %.2fx"
-          % (first, first / d.full_frame_px, FULL_REPAINT_MAX),
-          first <= d.full_frame_px * FULL_REPAINT_MAX)
+    check("first paint %d px, %.0f ms <= %d ms" % (first, d.est_ms, FULL_MS),
+          d.est_ms <= FULL_MS)
+    full_ms = d.est_ms
 
     # A tenth of a km/h faster: the speed digits may change, nothing else does.
     faster = board.frame(**dict(board.nominal(),
@@ -150,35 +157,41 @@ def main():
     screen = Riding()
     d = Display()
     screen.render(d, board.frame(), board)          # first paint, from rest
-    t = anim.Tweened(0.0, frames=10)
-    t.set(45.0)
-    worst = 0
-    frames = 0
-    while not t.settled:
-        kph = t.advance()
+    # The battery bar sweeps between states; the screen reports when it is
+    # still owed frames. Every one of those frames has to fit the budget or
+    # the sweep stutters.
+    screen = Riding("nazare")
+    d = Display()
+    screen.render(d, board.frame(input_voltage=board.v_full), board, full=True)
+    target = board.frame(input_voltage=board.v_empty + 2.0)
+    worst, frames = 0.0, 0
+    while not screen.settled() and frames < 40:
+        d.px_written = d.chars_written = 0
+        d.calls = []
+        screen.render(d, target, board)
+        worst = max(worst, d.est_ms)
         frames += 1
-        d.px_written = 0
-        screen.render(d, board.frame(rpm=board.erpm_for_kph(kph)), board)
-        worst = max(worst, d.px_written)
-    check("animation ran %d frames" % frames, frames == 10)
-    check("worst animated frame %d px (%.3fx) <= %.2fx"
-          % (worst, worst / d.full_frame_px, ANIMATION_MAX),
-          worst <= d.full_frame_px * ANIMATION_MAX)
-    print("        worst frame ~%.1f ms of bus time; %d fps is affordable"
-          % (worst * 2 * 8 / 40e6 * 1000, int(1000 / max(0.1, worst * 2 * 8 / 40e6 * 1000))))
+    check("the bar animates rather than jumping", 1 < frames <= 12,
+          "took %d frames" % frames)
+    check("worst animated frame %.0f ms <= %d ms" % (worst, ANIMATION_MS),
+          worst <= ANIMATION_MS)
+    check("animation settles", screen.settled())
+    print("        %d frames, worst %.0f ms -> %d fps affordable"
+          % (frames, worst, int(1000 / max(1.0, worst))))
 
     # An animation that does not land exactly where a static draw would is a
     # bug you only see as a stale last digit.
-    endframe = board.frame(rpm=board.erpm_for_kph(45.0))
-    settled = Display()
-    Riding().render(settled, endframe, board, full=True)
+    settled_img = Display()
+    Riding("nazare").render(settled_img, target, board, full=True)
     live = Display()
-    s2 = Riding()
-    s2.render(live, board.frame(), board)
-    for kph in anim.tween(0.0, 45.0, 10):
-        s2.render(live, board.frame(rpm=board.erpm_for_kph(kph)), board)
+    s2 = Riding("nazare")
+    s2.render(live, board.frame(input_voltage=board.v_full), board, full=True)
+    for _ in range(20):
+        s2.render(live, target, board)
+        if s2.settled():
+            break
     check("animation lands exactly on the static render",
-          live.pixels == settled.pixels)
+          live.pixels == settled_img.pixels)
 
     print()
     print("== colour ramps are monotonic and in range")

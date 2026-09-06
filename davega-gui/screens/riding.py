@@ -13,6 +13,7 @@ the optimisation safe to trust.
 """
 
 from . import widgets
+from .anim import Tweened
 from .base import RegionScreen, W, H, MARGIN, HALF
 
 
@@ -27,8 +28,8 @@ def _speed(f, b):
     return "%3d" % round(abs(b.kph_for_erpm(f.rpm)))
 
 
-def _bar_fill(f, b):
-    return int((W - 2 * MARGIN) * soc(b, f.input_voltage))
+def _bar_target(f, b):
+    return (W - 2 * MARGIN) * soc(b, f.input_voltage)
 
 
 def _volts(f, b):
@@ -36,7 +37,24 @@ def _volts(f, b):
 
 
 class Riding(RegionScreen):
-    """Regions are (key, x, y, w, h, value_fn, draw_fn)."""
+    """Regions are (key, x, y, w, h, value_fn, draw_fn).
+
+    The battery bar sweeps; the numbers snap. Animating a gauge costs a
+    handful of pixels in one call, animating three large digits costs three
+    characters at ~8.6 ms each - and a tweened numeric readout reads like a
+    slot machine anyway.
+    """
+
+    def __init__(self, theme=None):
+        # Declared before the region table is built, because a region closure
+        # captures it.
+        self._bar = Tweened(0.0, frames=6, snap=2.0)
+        RegionScreen.__init__(self, theme)
+
+    def settled(self):
+        """True when nothing is mid-animation. A caller that renders only on
+        new telemetry uses this to know it still owes frames."""
+        return self._bar.settled
 
     # -- element painters --------------------------------------------------
 
@@ -44,7 +62,12 @@ class Riding(RegionScreen):
         widgets.text(d, MARGIN, 24, self._drawn.get("speed"), v,
                      scale=6, color=self.t.ink, bg=self.t.ground)
 
-    def _bar(self, d, f, b, v):
+    def _bar_value(self, f, b):
+        """Step the tween one frame and report where the bar should be now."""
+        self._bar.set(_bar_target(f, b))
+        return int(self._bar.advance())
+
+    def _paint_bar(self, d, f, b, v):
         bar_w = W - 2 * MARGIN
         d.fill_rectangle(MARGIN, 96, bar_w, 18, self.t.track)
         if v:
@@ -82,7 +105,7 @@ class Riding(RegionScreen):
         hot = lambda f, b: self.t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
         return (
             ("speed", MARGIN, 24, 150, 48, _speed, self._big_speed),
-            ("bar", MARGIN, 96, W - 2 * MARGIN, 18, _bar_fill, self._bar),
+            ("bar", MARGIN, 96, W - 2 * MARGIN, 18, self._bar_value, self._paint_bar),
             ("volts", MARGIN, 120, W - 2 * MARGIN, 10, _volts, self._volts_line),
             ("motor_a", MARGIN, 148, HALF, 40,
              lambda f, b: "%4.0f" % f.avg_motor_current,
