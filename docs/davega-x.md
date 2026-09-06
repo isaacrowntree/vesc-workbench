@@ -24,12 +24,32 @@ From the (now closed) shop listing and the firmware image itself:
 | MCU | **ESP32** — 512 kB RAM, 4 MB flash |
 | Display | 2.8″ 240×320 TFT, **ILI9341** (`frozen/ili934xnew.py`) |
 | USB | micro USB behind the case, via a **CP2102** USB-UART bridge |
-| Radio | 2.4 GHz WiFi 802.11 b/g/n, plus BLE (used for LLT / ENNOID BMS) |
+| Radio | 2.4 GHz WiFi 802.11 b/g/n, plus BLE — see below |
 | To the ESC | 7-pin or 8-pin JST-PH, UART |
 | Build | MicroPython on **ESP-IDF v4.0.1** |
 
 So: rather more than a display. It is a WiFi/BLE computer that happens to have a
 screen, and the micro USB port means serial access needs no soldering.
+
+### Bluetooth is not a way in
+
+The X advertises Bluetooth and has a `bt_enabled` setting, so it is a reasonable
+guess that you could reach the REPL over BLE. You cannot.
+
+Everything BLE in the firmware lives in `frozen/llt_bms.py`, and every string in
+it is **central-role**: "Looking for BLE BMS...", "discovering services",
+"discovering characteristics", "notify characteristic found", "write
+characteristic found", "subscribing to notifications", "connected to BMS", "No
+BLE BMS found". `DATA_SERVICE`, `NOTIFY_CHARACTERISTIC` and `WRITE_CHARACTERISTIC`
+are the *BMS's* UUIDs, which the display connects out to.
+
+There is no DAVEGA-side service, no advertised device name, and nothing that
+would accept an inbound connection. `bt_enabled` turns on BMS polling, not a
+transport. (MicroPython's `gap_advertise` and `gatts_*` names do appear in the
+image, but every built-in name does — the symbol table is not evidence of use.)
+
+So **WiFi and WebREPL is the only remote way onto the device**, with USB serial
+over the CP2102 as the wired alternative.
 
 ## Firmware, and what is still downloadable
 
