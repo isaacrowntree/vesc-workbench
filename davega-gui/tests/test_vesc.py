@@ -126,6 +126,17 @@ def main():
     check("and it parses", vesc.parse(out) is not None)
 
     print()
+    print("== pack current scales with the number of ESCs")
+    # Each ESC reports only its own draw. The reference firmware multiplies by
+    # VESC_COUNT; without it a dual board under-reports the pack by half.
+    one = vesc.parse(build(avg_input_current=9.5), esc_count=1)
+    two = vesc.parse(build(avg_input_current=9.5), esc_count=2)
+    check("single esc unchanged", abs(one["avg_input_current"] - 9.5) < 0.02)
+    check("dual esc doubles", abs(two["avg_input_current"] - 19.0) < 0.02)
+    check("motor current is per-motor, not scaled",
+          abs(vesc.parse(build(avg_motor_current=18.0), esc_count=2)["avg_motor_current"] - 18.0) < 0.02)
+
+    print()
     print("== a Unity reply is a different shape, and we know it")
     check("unity pair table present", len(vesc.UNITY_PAIRS) == 5)
     check("unity motor current is a pair", vesc.UNITY_PAIRS[2][1] == (11, 15))

@@ -92,6 +92,16 @@ class Riding(RegionScreen):
                          scale=2, color=col, bg=self.t.ground)
         return paint
 
+    def _link(self, d, f, b, v):
+        """A quiet marker, not an alarm: the numbers are still the last real
+        ones, they have just stopped arriving."""
+        d.set_color(self.t.ground, self.t.ground)
+        d.fill_rectangle(W - 22, 8, 14, 10, self.t.ground)
+        if v:
+            d.set_color(self.t.warn, self.t.ground)
+            d.set_pos(W - 22, 8)
+            d.print(v)
+
     def _fault(self, d, f, b, v):
         # The banner is a filled block, not text, so it has to be cleared
         # explicitly when the fault goes away - otherwise it stays on the
@@ -126,6 +136,9 @@ class Riding(RegionScreen):
             ("used_ah", MARGIN + HALF, 208, HALF, 40,
              lambda f, b: "%4.1f" % f.amp_hours,
              self._cell("used_ah", MARGIN + HALF, 208)),
+            ("link", W - 22, 8, 14, 10,
+             lambda f, b: "" if f.get("link_ok", True) else "!",
+             self._link),
             ("fault", 0, 272, W, 24,
              lambda f, b: ("FAULT %d" % f.fault) if f.fault else "",
              self._fault),

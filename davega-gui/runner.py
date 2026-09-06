@@ -1,0 +1,87 @@
+"""The main loop, with nothing device-specific in it.
+
+Kept separate from `start.py` so it can be tested with fakes: the loop is where
+the awkward decisions live - what to draw when telemetry stops, when to stop
+polling and finish an animation, when to give up.
+"""
+
+# The reference firmware's UPDATE_DELAY: "how often data is read from VESC".
+UPDATE_MS = 50
+
+# After this long with no valid reply, say so rather than showing stale
+# numbers as though they were live.
+STALE_MS = 1500
+
+
+class Runner:
+    def __init__(self, app, display, uart, board, buttons, ticks_ms, ticks_diff,
+                 sleep_ms, vesc, esc_count=1):
+        self.app = app
+        self.d = display
+        self.uart = uart
+        self.board = board
+        self.buttons = buttons
+        self._now = ticks_ms
+        self._diff = ticks_diff
+        self._sleep = sleep_ms
+        self.vesc = vesc
+        self.esc_count = esc_count
+        self.frame = board.frame()
+        self.last_good = None
+        self.stale = False
+        self.reads = 0
+        self.bad = 0
+        self.last_read_ok = False
+
+    def poll_telemetry(self):
+        """One request/reply. Returns True if the frame was updated."""
+        try:
+            self.vesc.request(self.uart)
+            packet = self.vesc.read(self.uart, UPDATE_MS, self._now, self._diff)
+            values = self.vesc.parse(packet, self.esc_count)
+        except Exception:                       # noqa: BLE001
+            values = None
+        self.reads += 1
+        if values is None:
+            self.bad += 1
+            return False
+        self.frame.update(values)
+        self.last_good = self._now()
+        return True
+
+    def is_stale(self):
+        if self.last_good is None:
+            return self.reads > 0
+        return self._diff(self._now(), self.last_good) > STALE_MS
+
+    def step(self):
+        """One pass: buttons, telemetry, then draw until settled.
+
+        Drawing is drained rather than done once, because an animation owes
+        more frames than telemetry provides and the two run at different
+        rates.
+        """
+        for event in self.buttons.poll():
+            self.app.press(event)
+
+        ok = self.poll_telemetry()
+        self.stale = self.is_stale()
+        # Their screens get told every pass whether the read worked. Ours now
+        # do too, through the frame, so a screen can show it without the
+        # runner knowing which screens care.
+        self.frame["link_ok"] = not self.stale
+        self.last_read_ok = ok
+
+        drawn = 0
+        while self.app.tick(self.d, self.frame) and drawn < 20:
+            drawn += 1
+        return drawn + 1
+
+    def run(self, forever=True, limit=0):
+        n = 0
+        while True:
+            self.step()
+            n += 1
+            if not forever and n >= limit:
+                return n
+            self._sleep(UPDATE_MS)

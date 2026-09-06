@@ -70,15 +70,22 @@ def valid(packet):
     return got == crc16(packet[2:2 + n])
 
 
-def parse(packet):
+def parse(packet, esc_count=1):
     """Reply bytes to real units. Returns None if the packet is not sound -
-    a wrong number rendered confidently is worse than no number."""
+    a wrong number rendered confidently is worse than no number.
+
+    `esc_count` scales pack current: each ESC reports only what it draws, so a
+    dual-motor board draws twice what one packet says. The reference firmware
+    does the same (`get_battery_current() * VESC_COUNT`), and without it a
+    dual board under-reports its pack draw by half.
+    """
     if not valid(packet):
         return None
     out = {}
     for name, off, fmt, div in STANDARD:
         (raw,) = struct.unpack(fmt, packet[off:off + struct.calcsize(fmt)])
         out[name] = raw / div if div != 1.0 else raw
+    out["avg_input_current"] *= esc_count
     out["fault"] = packet[FAULT_OFFSET] if len(packet) > FAULT_OFFSET else 0
     # Fields the ESC does not send, which screens still render.
     out["watt_hours"] = 0.0
@@ -93,12 +100,19 @@ def request(uart):
     uart.write(GET_VALUES)
 
 
-def read(uart, deadline_ms, ticks_ms, ticks_diff, max_len=70):
+def read(uart, deadline_ms, ticks_ms, ticks_diff, max_len=70, max_spins=2000):
     """Collect one reply. Mirrors the reference implementation: read until the
-    frame is complete by its own declared length, then stop."""
+    frame is complete by its own declared length, then stop.
+
+    Bounded by iterations as well as by time. A time-only bound spins forever
+    if the clock stops - which is not hypothetical: it hung the test rig, and
+    on a board a stalled timer would take the dashboard with it.
+    """
     buf = bytearray()
     start = ticks_ms()
-    while ticks_diff(ticks_ms(), start) < deadline_ms:
+    spins = 0
+    while ticks_diff(ticks_ms(), start) < deadline_ms and spins < max_spins:
+        spins += 1
         chunk = uart.read(max_len - len(buf))
         if chunk:
             buf += chunk
