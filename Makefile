@@ -168,9 +168,11 @@ $(WEBREPL):
 	@unzip -oq $(BUILD)/webrepl.zip -d $(BUILD)
 
 webrepl: $(WEBREPL)
-	@echo "1. hold UP+DOWN while the DAVEGA boots - it raises its own WiFi AP"
-	@echo "2. join that AP (this machine loses the board bridge until you leave)"
-	@echo "3. connect to ws://192.168.4.1:8266 in the page that just opened"
+	@echo "1. hold UP+DOWN and power-cycle the board - the DAVEGA has no switch,"
+	@echo "   it boots when the ESC powers it"
+	@echo "2. the display should say: starting in WebREPL mode / WiFi AP: davega-x-..."
+	@echo "3. join that davega-x-... network (this machine loses the board bridge)"
+	@echo "4. connect to ws://192.168.4.1:8266 in the page that just opened"
 	@echo ""
 	@echo "then paste davega-shim/webrepl/recon.py and call recon()"
 ifeq ($(UNAME),Darwin)
