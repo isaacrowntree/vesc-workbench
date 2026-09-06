@@ -66,16 +66,23 @@ help:
 	@echo "Offline:"
 	@echo "  make test          - all host-side tests"
 	@echo "  make test-py       - shim reference + payload layout tests"
+	@echo "  make gui-test      - DAVEGA screen tests: golden images, budget, sweeps"
 	@echo "  make test-lisp     - run the LispBM logic in the upstream REPL (Docker)"
 	@echo ""
 	@echo "Vars: HOST=$(HOST) PORT=$(PORT) CANID=$(CANID) SECS=$(SECS)"
 	@echo "      PROFILE=$(PROFILE)   (e.g. profiles/nazare-unity.mk)"
 
 # ---- offline tests ---------------------------------------------------------
-test: test-py test-lisp
+test: test-py gui-test test-lisp
 
 test-py:
 	@cd davega-shim && python3 test_shim.py && python3 test_layout.py
+
+gui-test:
+	@python3 davega-gui/tests/test_screens.py
+
+gui-golden:
+	@python3 davega-gui/tests/test_screens.py --update-golden
 
 test-lisp:
 	@./tests/run-lisp-tests.sh
