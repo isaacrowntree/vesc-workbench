@@ -131,7 +131,9 @@ against upstream on every CI run:
 
 So the display is not failing to parse anything. It is refusing to talk, on two
 bytes. The shim proxies every command to the firmware's own decoder via
-`cmds-proc` and rewrites only those two, recomputing the CRC. ~60 lines of Lisp.
+`cmds-proc` and rewrites only those two, recomputing the CRC — 27 lines of Lisp
+for the rewrite itself, 100 for the whole shim including the UART reader and
+its debug counters.
 
 See [docs/davega-shim.md](docs/davega-shim.md). For the display itself — its
 hardware, its `/config.json` settings, and what is still downloadable from the
