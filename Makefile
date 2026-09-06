@@ -57,7 +57,11 @@ help:
 	@echo "  make lisp-stop     - stop the running LispBM script"
 	@echo ""
 	@echo "DAVEGA X display (its own WiFi AP, not the board):"
-	@echo "  make webrepl       - fetch the WebREPL client and open it locally"
+	@echo "  make webrepl        - fetch the WebREPL client and open it locally"
+	@echo "  make davega-recon   - read-only device recon over WebREPL"
+	@echo "  make davega-settings- print /config.json"
+	@echo "  make davega-gate    - inspect the version gate in frozen.run_standard"
+	@echo "  (the three above need WEBREPL_PASSWORD=xxxx and this machine on its AP)"
 	@echo ""
 	@echo "Offline:"
 	@echo "  make test          - all host-side tests"
@@ -166,6 +170,23 @@ $(WEBREPL):
 	@echo "fetching the WebREPL client..."
 	@curl -sL -o $(BUILD)/webrepl.zip https://github.com/micropython/webrepl/archive/refs/heads/master.zip
 	@unzip -oq $(BUILD)/webrepl.zip -d $(BUILD)
+
+# Drive the display's REPL from the shell instead of the browser terminal.
+# Needs this machine joined to the DAVEGA's AP, and its WebREPL password:
+#   make davega-recon WEBREPL_PASSWORD=xxxx
+DAVEGA_HOST ?= 192.168.4.1
+
+davega-recon:
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega-shim/webrepl/recon.py -e "recon()"
+
+davega-settings:
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega-shim/webrepl/settings.py -e "show()"
+
+davega-gate:
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega-shim/webrepl/recon.py -e "probe('frozen.run_standard')"
 
 webrepl: $(WEBREPL)
 	@echo "1. hold UP+DOWN and power-cycle the board - the DAVEGA has no switch,"
