@@ -15,7 +15,8 @@ STALE_MS = 1500
 
 class Runner:
     def __init__(self, app, display, uart, board, buttons, ticks_ms, ticks_diff,
-                 sleep_ms, vesc, esc_count=1, session=None, lifetime=None):
+                 sleep_ms, vesc, esc_count=1, session=None, lifetime=None,
+                 resistance=None):
         self.app = app
         self.d = display
         self.uart = uart
@@ -34,6 +35,7 @@ class Runner:
         self.last_read_ok = False
         self.session = session
         self.lifetime = lifetime
+        self.resistance = resistance
         self._last_tick = None
 
     def poll_telemetry(self):
@@ -74,6 +76,19 @@ class Runner:
         # runner knowing which screens care.
         self.frame["link_ok"] = not self.stale
         self.last_read_ok = ok
+
+        if self.resistance is not None and ok:
+            self.resistance.update(self.frame["input_voltage"],
+                                   self.frame["avg_input_current"])
+            r = self.resistance.value
+            self.frame["r_internal"] = r
+            # Charge shown from the open-circuit voltage, so the gauge stops
+            # dropping every time the rider accelerates.
+            self.frame["soc"] = (
+                self.board.soc_loaded(self.frame["input_voltage"],
+                                      self.frame["avg_input_current"], r)
+                if r else
+                self.board.soc_for_voltage(self.frame["input_voltage"]))
 
         now = self._now()
         dt = 0 if self._last_tick is None else self._diff(now, self._last_tick)

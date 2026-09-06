@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from harness.telemetry import Board                     # noqa: E402
-from screens.session import Session                     # noqa: E402
+from screens.session import Session, Resistance         # noqa: E402
 
 fails = []
 
@@ -89,6 +89,72 @@ def main():
           "got %.1f km from %.3f km of riding" % (fresh.range_km(f), fresh.trip_km))
     check("answers once there is a ride behind it",
           s.range_km(f) > 1.0, "got %.1f" % s.range_km(f))
+
+    print()
+    print("== internal resistance, the Rint model's R0")
+    # V_terminal = OCV(SoC) - I*R0. Recovering R0 from the data we already
+    # sample is what lets the charge gauge stop flinching under throttle.
+    r = Resistance(b.cells)
+    truth = 0.040
+    check("says nothing from a single sample",
+          r.update(48.0, 0.0) == 0.0)
+    check("still nothing without a spread of current",
+          r.update(47.9, 2.0) == 0.0)
+    for cur in (0.0, 5.0, 12.0, 28.0, 3.0):
+        r.update(48.0 - cur * truth, cur)
+    check("recovers R0 from a spread (%.4f vs %.4f)" % (r.value, truth),
+          near(r.value, truth, 0.004))
+    check("reports per-cell milliohms", near(r.milliohms_per_cell, 3.33, 0.4),
+          "got %.2f" % r.milliohms_per_cell)
+
+    noisy = Resistance(b.cells)
+    for cur in (0.0, 30.0):
+        noisy.update(48.0 + cur * 0.01, cur)      # voltage RISING under load
+    check("refuses a negative resistance", noisy.value == 0.0)
+
+    print()
+    print("== state of charge that does not flinch under throttle")
+    loaded_v = 48.0 - 28.0 * truth
+    naive = b.soc_for_voltage(loaded_v)
+    real = b.soc_loaded(loaded_v, 28.0, truth)
+    check("the naive reading is lower under load (%.0f%% vs %.0f%%)"
+          % (100 * naive, 100 * real), real > naive)
+    check("compensated matches the resting reading",
+          near(real, b.soc_for_voltage(48.0), 0.02),
+          "%.3f vs %.3f" % (real, b.soc_for_voltage(48.0)))
+    check("at rest the two agree",
+          near(b.soc_loaded(48.0, 0.0, truth), b.soc_for_voltage(48.0), 0.001))
+
+    print()
+    print("== a falling pack costs power and range together")
+    check("full pack is full power", near(b.power_fraction(b.v_full), 1.0, 0.001))
+    check("power falls with voltage",
+          b.power_available_w(40.0) < b.power_available_w(45.8) < b.power_available_w(50.4))
+    check("power at 40 V is about four fifths of full",
+          0.78 < b.power_fraction(40.0) < 0.81,
+          "got %.3f" % b.power_fraction(40.0))
+    check("a full pack costs nothing extra", near(b.sag_factor(1.0), 1.0, 0.001))
+    check("an empty pack costs much more per km", b.sag_factor(0.0) > 1.8,
+          "got %.2f" % b.sag_factor(0.0))
+    check("the cost rises monotonically as it empties",
+          all(b.sag_factor(x / 10.0) >= b.sag_factor((x + 1) / 10.0)
+              for x in range(10)))
+
+    print()
+    print("== sag-aware range is shorter than the naive estimate")
+    # The naive answer divides remaining energy by today's rate. Today's rate
+    # is not what the last kilometres will cost, so it flatters the rider -
+    # which is the wrong direction for a number people plan a route around.
+    naive = b.usable_watt_hours * b.soc_for_voltage(45.8) / 18.7
+    real = b.range_km(18.7, 45.8)
+    check("shorter than naive (%.1f vs %.1f km)" % (real, naive), real < naive)
+    check("not absurdly shorter", real > naive * 0.6,
+          "%.1f vs %.1f" % (real, naive))
+    check("a full pack goes further than a half one",
+          b.range_km(18.7, b.v_full) > b.range_km(18.7, 43.2))
+    check("no consumption, no answer", b.range_km(0.0, 45.8) == 0.0)
+    check("an empty pack offers nothing", b.range_km(18.7, b.v_empty) < 0.5,
+          "got %.2f" % b.range_km(18.7, b.v_empty))
 
     print()
     print("== a stop is not riding, but is still elapsed")

@@ -123,8 +123,10 @@ class Session:
         # and a range estimate people trust is worse than one they wait for.
         if rate <= 0.0 or self.trip_km < MIN_EVIDENCE_KM:
             return 0.0
-        soc = self.board.soc_for_voltage(f["input_voltage"])
-        return (self.board.usable_watt_hours * soc) / rate
+        # Not remaining-energy-over-rate: the kilometres left cost more than
+        # the ones behind you, because power falls with voltage and sag
+        # deepens as the pack empties.
+        return self.board.range_km(rate, f["input_voltage"])
 
     # -- persistence -------------------------------------------------------
 
@@ -158,3 +160,58 @@ class Session:
                                       or other.min_voltage < self.min_voltage):
             self.min_voltage = other.min_voltage
         return self
+
+
+class Resistance:
+    """Online estimate of pack internal resistance, R0 in the Rint model.
+
+    From pairs of (voltage, current) samples: the slope of V against I is
+    -R0. Rather than a full regression - which is more arithmetic than an
+    ESP32 wants at 5 Hz - it tracks the lightest and heaviest loaded samples
+    seen recently and takes the slope between them, which is where the
+    signal is anyway.
+
+    Reports nothing until it has seen a real spread of current, because a
+    slope fitted to noise is worse than no slope at all.
+    """
+
+    MIN_SPREAD_A = 8.0        # amps between the two samples before we believe it
+    BLEND = 0.2               # how fast the estimate follows new evidence
+
+    def __init__(self, cells=12):
+        self.cells = cells
+        self.value = 0.0
+        self._lo = None       # (current, voltage) least loaded
+        self._hi = None       # most loaded
+        self.samples = 0
+
+    def update(self, volts, current):
+        if volts <= 0:
+            return self.value
+        if self._lo is None or current < self._lo[0]:
+            self._lo = (current, volts)
+        if self._hi is None or current > self._hi[0]:
+            self._hi = (current, volts)
+        if self._lo and self._hi:
+            di = self._hi[0] - self._lo[0]
+            if di >= self.MIN_SPREAD_A:
+                dv = self._lo[1] - self._hi[1]
+                r = dv / di
+                # A pack with negative or absurd resistance is a measurement
+                # artefact, not a discovery.
+                if 0.0 < r < 1.0:
+                    self.value = (r if self.value == 0.0
+                                  else self.value * (1 - self.BLEND) + r * self.BLEND)
+                    self.samples += 1
+        return self.value
+
+    @property
+    def milliohms_per_cell(self):
+        if not self.value:
+            return 0.0
+        return self.value * 1000.0 / self.cells
+
+    def reset(self):
+        self.value = 0.0
+        self._lo = self._hi = None
+        self.samples = 0

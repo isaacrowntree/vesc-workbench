@@ -251,6 +251,9 @@ else
 	@xdg-open $(WEBREPL) >/dev/null 2>&1 || echo "open $(WEBREPL)"
 endif
 
+dual-check: check
+	$(call run_qml,dual-check)
+
 faults: check
 	$(call run_qml,faults)
 

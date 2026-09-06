@@ -19,9 +19,15 @@ from .base import (RegionScreen, W, H, MARGIN, HALF, col_x, row_y,
 
 
 
-def soc(board, volts):
-    """State of charge along the pack's discharge curve - the same curve the
-    stock firmware uses, read off the device rather than approximated."""
+def soc(board, volts, frame=None):
+    """State of charge.
+
+    Prefers the compensated figure the runner computes from the Rint model,
+    which does not sag under throttle; falls back to the raw discharge curve
+    when nothing has estimated the pack's resistance yet.
+    """
+    if frame is not None and frame.get("soc") is not None:
+        return frame["soc"]
     return board.soc_for_voltage(volts)
 
 
@@ -30,11 +36,12 @@ def _speed(f, b):
 
 
 def _bar_target(f, b):
-    return (W - 2 * MARGIN) * soc(b, f.input_voltage)
+    return (W - 2 * MARGIN) * soc(b, f.input_voltage, f)
 
 
 def _volts(f, b):
-    return "%4.1fV  %3d%%" % (f.input_voltage, round(soc(b, f.input_voltage) * 100))
+    return "%4.1fV  %3d%%" % (f.input_voltage,
+                             round(soc(b, f.input_voltage, f) * 100))
 
 
 class Riding(RegionScreen):

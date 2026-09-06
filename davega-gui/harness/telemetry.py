@@ -114,7 +114,7 @@ class Board(_Board):
             # these under a prefix - s_ for this ride, l_ for lifetime - so a
             # screen reads them like any other field and never holds a
             # reference to an accumulator.
-            link_ok=True,
+            link_ok=True, r_internal=0.0, soc=None,
             s_trip_km=0.0, s_riding_ms=0, s_elapsed_ms=0, s_max_kph=0.0,
             s_avg_kph=0.0, s_min_voltage=0.0, s_max_fet=0.0,
             s_max_motor_temp=0.0, s_max_current=0.0, s_min_current=0.0,
