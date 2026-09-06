@@ -14,7 +14,8 @@ the optimisation safe to trust.
 
 from . import widgets
 from .anim import Tweened
-from .base import RegionScreen, W, H, MARGIN, HALF
+from .base import (RegionScreen, W, H, MARGIN, HALF, col_x, row_y,
+                   BODY_TOP, HERO, VALUE)
 
 
 
@@ -45,11 +46,13 @@ class Riding(RegionScreen):
     slot machine anyway.
     """
 
-    def __init__(self, theme=None):
+    title = "RIDING"
+
+    def __init__(self, theme=None, siblings=(), position=0):
         # Declared before the region table is built, because a region closure
         # captures it.
         self._bar = Tweened(0.0, frames=6, snap=2.0)
-        RegionScreen.__init__(self, theme)
+        RegionScreen.__init__(self, theme, siblings, position)
 
     def on_full(self, f, b):
         # Snap: a screen you have just switched to should show where the
@@ -66,7 +69,7 @@ class Riding(RegionScreen):
     # -- element painters --------------------------------------------------
 
     def _big_speed(self, d, f, b, v):
-        widgets.text(d, MARGIN, 24, self._drawn.get("speed"), v,
+        widgets.text(d, col_x(0), 24, self._drawn.get("speed"), v,
                      scale=6, color=self.t.ink, bg=self.t.ground)
 
     def _bar_value(self, f, b):
@@ -76,12 +79,12 @@ class Riding(RegionScreen):
 
     def _paint_bar(self, d, f, b, v):
         bar_w = W - 2 * MARGIN
-        d.fill_rectangle(MARGIN, 96, bar_w, 18, self.t.track)
+        d.fill_rectangle(col_x(0), 96, bar_w, 18, self.t.track)
         if v:
-            d.fill_rectangle(MARGIN, 96, v, 18, self.t.soc_color(v / bar_w))
+            d.fill_rectangle(col_x(0), 96, v, 18, self.t.soc_color(v / bar_w))
 
     def _volts_line(self, d, f, b, v):
-        widgets.text(d, MARGIN, 120, self._drawn.get("volts"), v,
+        widgets.text(d, col_x(0), 120, self._drawn.get("volts"), v,
                      color=self.t.ink, bg=self.t.ground)
 
     def _cell(self, key, x, y, color=None):
@@ -91,16 +94,6 @@ class Riding(RegionScreen):
             widgets.text(d, x, y + 12, self._drawn.get(key), v,
                          scale=2, color=col, bg=self.t.ground)
         return paint
-
-    def _link(self, d, f, b, v):
-        """A quiet marker, not an alarm: the numbers are still the last real
-        ones, they have just stopped arriving."""
-        d.set_color(self.t.ground, self.t.ground)
-        d.fill_rectangle(W - 22, 8, 14, 10, self.t.ground)
-        if v:
-            d.set_color(self.t.warn, self.t.ground)
-            d.set_pos(W - 22, 8)
-            d.print(v)
 
     def _fault(self, d, f, b, v):
         # The banner is a filled block, not text, so it has to be cleared
@@ -113,32 +106,29 @@ class Riding(RegionScreen):
             return
         d.set_color(self.t.ink, self.t.danger)
         d.fill_rectangle(0, 272, W, 24, self.t.danger)
-        d.set_pos(MARGIN, 280)
+        d.set_pos(col_x(0), 280)
         d.print(v)
 
     # -- layout ------------------------------------------------------------
 
     def _build_regions(self):
         hot = lambda f, b: self.t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
-        return (
-            ("speed", MARGIN, 24, 150, 48, _speed, self._big_speed),
-            ("bar", MARGIN, 96, W - 2 * MARGIN, 18, self._bar_value, self._paint_bar),
-            ("volts", MARGIN, 120, W - 2 * MARGIN, 10, _volts, self._volts_line),
-            ("motor_a", MARGIN, 148, HALF, 40,
+        return self.status_regions() + (
+            ("speed", col_x(0), 24, 150, 48, _speed, self._big_speed),
+            ("bar", col_x(0), 96, W - 2 * MARGIN, 18, self._bar_value, self._paint_bar),
+            ("volts", col_x(0), 120, W - 2 * MARGIN, 10, _volts, self._volts_line),
+            ("motor_a", col_x(0), 148, HALF, 40,
              lambda f, b: "%4.0f" % f.avg_motor_current,
-             self._cell("motor_a", MARGIN, 148)),
-            ("batt_a", MARGIN + HALF, 148, HALF, 40,
+             self._cell("motor_a", col_x(0), 148)),
+            ("batt_a", col_x(1), 148, HALF, 40,
              lambda f, b: "%4.0f" % f.avg_input_current,
-             self._cell("batt_a", MARGIN + HALF, 148)),
-            ("fet_c", MARGIN, 208, HALF, 40,
+             self._cell("batt_a", col_x(1), 148)),
+            ("fet_c", col_x(0), 208, HALF, 40,
              lambda f, b: "%4.0f" % f.temp_fet_filtered,
-             self._cell("fet_c", MARGIN, 208, hot)),
-            ("used_ah", MARGIN + HALF, 208, HALF, 40,
+             self._cell("fet_c", col_x(0), 208, hot)),
+            ("used_ah", col_x(1), 208, HALF, 40,
              lambda f, b: "%4.1f" % f.amp_hours,
-             self._cell("used_ah", MARGIN + HALF, 208)),
-            ("link", W - 22, 8, 14, 10,
-             lambda f, b: "" if f.get("link_ok", True) else "!",
-             self._link),
+             self._cell("used_ah", col_x(1), 208)),
             ("fault", 0, 272, W, 24,
              lambda f, b: ("FAULT %d" % f.fault) if f.fault else "",
              self._fault),
@@ -147,11 +137,12 @@ class Riding(RegionScreen):
     def chrome(self, d):
         """Static furniture. Painted once, then never touched again - it is
         the part of the screen that cannot change."""
+        RegionScreen.chrome(self, d)
         d.set_color(self.t.dim, self.t.ground)
-        d.set_pos(MARGIN + 150, 60)
+        d.set_pos(col_x(0) + 150, 60)
         d.print("km/h")
-        for label, x, y in (("MOTOR A", MARGIN, 148), ("BATT A", MARGIN + HALF, 148),
-                            ("FET C", MARGIN, 208), ("USED Ah", MARGIN + HALF, 208)):
+        for label, x, y in (("MOTOR A", col_x(0), 148), ("BATT A", col_x(1), 148),
+                            ("FET C", col_x(0), 208), ("USED Ah", col_x(1), 208)):
             d.set_color(self.t.dim, self.t.ground)
             d.set_pos(x, y)
             d.print(label)

@@ -31,7 +31,11 @@ BUDGET = {"fill_rectangle": 24, "print": 24, "total": 120}
 # ~8.6 ms, so time is what a screen is actually spending.
 FULL_MS = 900
 SETTLED_MS = 120
-ANIMATION_MS = 60          # every frame of a tween, so motion stays smooth
+# Every frame of a tween. Raised from 60 when the shared status strip landed:
+# the header's charge readout and the battery bar both derive from voltage, so
+# a voltage sweep legitimately redraws two things. Still ~15 fps, and the
+# alternative - letting the header lag the bar - would look broken.
+ANIMATION_MS = 75
 
 # Pixels pushed, which is what the SPI bus is actually billed for. A full
 # repaint is allowed to be expensive; a steady-state frame, where usually one

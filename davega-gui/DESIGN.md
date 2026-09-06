@@ -62,6 +62,25 @@ percentage plus estimated remaining range, and an unmissable colour block for
 assist mode. The Hoyt Puck has three modes; that belongs on screen as a bold,
 glanceable state, not a number in a corner.
 
+## One instrument, not five views
+
+Five screens sharing a palette still read as five screens. What makes them one
+instrument is a shared skeleton, and it is enforced by tests rather than by
+discipline:
+
+- **One grid.** `col_x(i)`, `row_y(n)`, one margin, one gutter. A value in the
+  left column sits at the same x on every screen, so switching screens does not
+  move the furniture. A test asserts every region starts on a grid column.
+- **One type scale.** Hero, primary, value, label - four sizes, used the same
+  way. A test asserts nothing draws at a size outside it.
+- **A status strip on every screen.** Screen name on the left, charge and link
+  health on the right, always in the same place. You never lose your bearings.
+- **Page dots.** Which of the set you are on, so the screens read as a sequence.
+  A test asserts the lit dot follows the position.
+
+The pair that proves it: the ride screen and the lifetime screen show different
+timescales of the same six ideas, in the same two columns, in the same order.
+
 ## Proposed layout, 240×320 portrait
 
 ```

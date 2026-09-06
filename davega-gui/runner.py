@@ -15,7 +15,7 @@ STALE_MS = 1500
 
 class Runner:
     def __init__(self, app, display, uart, board, buttons, ticks_ms, ticks_diff,
-                 sleep_ms, vesc, esc_count=1):
+                 sleep_ms, vesc, esc_count=1, session=None, lifetime=None):
         self.app = app
         self.d = display
         self.uart = uart
@@ -32,6 +32,9 @@ class Runner:
         self.reads = 0
         self.bad = 0
         self.last_read_ok = False
+        self.session = session
+        self.lifetime = lifetime
+        self._last_tick = None
 
     def poll_telemetry(self):
         """One request/reply. Returns True if the frame was updated."""
@@ -72,6 +75,15 @@ class Runner:
         self.frame["link_ok"] = not self.stale
         self.last_read_ok = ok
 
+        now = self._now()
+        dt = 0 if self._last_tick is None else self._diff(now, self._last_tick)
+        self._last_tick = now
+        if self.session is not None and dt > 0:
+            self.session.update(self.frame, dt)
+            _publish(self.frame, self.session, "s_", self.board)
+        if self.lifetime is not None:
+            _publish(self.frame, self.lifetime, "l_", self.board)
+
         drawn = 0
         while self.app.tick(self.d, self.frame) and drawn < 20:
             drawn += 1
@@ -85,3 +97,25 @@ class Runner:
             if not forever and n >= limit:
                 return n
             self._sleep(UPDATE_MS)
+
+
+def _publish(frame, session, prefix, board):
+    """Fold a session's numbers into the frame under a prefix.
+
+    Screens stay pure functions of one frame; they never hold a reference to
+    an accumulator, so a test can render any session state directly.
+    """
+    frame[prefix + "trip_km"] = session.trip_km
+    frame[prefix + "riding_ms"] = session.riding_ms
+    frame[prefix + "elapsed_ms"] = session.elapsed_ms
+    frame[prefix + "max_kph"] = session.max_kph
+    frame[prefix + "avg_kph"] = session.avg_kph
+    frame[prefix + "min_voltage"] = session.min_voltage
+    frame[prefix + "max_fet"] = session.max_fet
+    frame[prefix + "max_motor_temp"] = session.max_motor_temp
+    frame[prefix + "max_current"] = session.max_current
+    frame[prefix + "min_current"] = session.min_current
+    frame[prefix + "max_batt_current"] = session.max_batt_current
+    frame[prefix + "wh_spent"] = session.wh_spent
+    frame[prefix + "wh_per_km"] = session.wh_per_km
+    frame[prefix + "range_km"] = session.range_km(frame)

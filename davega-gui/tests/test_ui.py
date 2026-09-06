@@ -22,6 +22,7 @@ from screens.app import (App, Menu, MenuItem, UP, DOWN, ENTER,     # noqa: E402
                          HOLD, SWEEP, SCREEN, MENU)
 from screens.themes import THEMES                                 # noqa: E402
 from screens.startup import Splash, play as play_sweep            # noqa: E402
+from screens import base                                          # noqa: E402
 
 SCREENS = (("riding", Riding), ("range", RangeScreen),
            ("overview", OverviewScreen), ("session", SessionScreen),
@@ -206,6 +207,64 @@ def main():
     d = Display()
     app.render(d, b.nominal())
     check("renders in the new theme", len(d.calls) > 0)
+
+    print()
+    print("== the screens are one instrument, not five views")
+    names = tuple(n for n, _ in SCREENS)
+
+    # Same header, same place, on every screen.
+    headers = []
+    for i, (name, cls) in enumerate(SCREENS):
+        d = Display()
+        cls("nazare", names, i).render(d, b.nominal(), b, full=True)
+        rule = [c for c in d.calls if c[0] == "fill_rectangle"
+                and c[1].get("y") == base.HEADER_H - 4]
+        headers.append(bool(rule))
+    check("every screen draws the header rule", all(headers),
+          "missing on %s" % [n for (n, _), h in zip(SCREENS, headers) if not h])
+
+    titles = [cls.title for _, cls in SCREENS]
+    check("every screen names itself", all(titles), "got %r" % titles)
+    check("titles are unique", len(set(titles)) == len(titles))
+
+    # Page dots: present, and the lit one follows the position.
+    lit = []
+    for i, (name, cls) in enumerate(SCREENS):
+        d = Display()
+        cls("nazare", names, i).render(d, b.nominal(), b, full=True)
+        dots = [c[1] for c in d.calls if c[0] == "fill_rectangle"
+                and c[1].get("h") == 4 and c[1].get("w") == 4]
+        accent = THEMES["nazare"].accent
+        on = [j for j, dd in enumerate(dots) if dd.get("color") == accent]
+        lit.append(len(dots) == len(SCREENS) and on == [i])
+    check("page dots show which of the set you are on", all(lit),
+          "wrong on %s" % [n for (n, _), ok in zip(SCREENS, lit) if not ok])
+
+    # Everything sits on the grid.
+    off = []
+    xs = set(base.col_x(i) for i in range(base.COLS))
+    for name, cls in SCREENS:
+        for r in cls("nazare", names, 0).regions():
+            if r[0].startswith("hdr_"):
+                continue            # the status strip has its own anchor
+            if r[1] == 0 and r[3] == base.W:
+                continue            # full-bleed banners are deliberate
+            if r[1] not in xs:
+                off.append("%s/%s x=%d" % (name, r[0], r[1]))
+    check("every region starts on a grid column", not off,
+          "off-grid: " + ", ".join(off[:4]))
+
+    # One type scale, used the same way.
+    scales = set()
+    for name, cls in SCREENS:
+        d = Display()
+        cls("nazare", names, 0).render(d, b.nominal(), b, full=True)
+        for call, kw in d.calls:
+            if call == "print":
+                scales.add(kw.get("scale", 1))
+    allowed = {base.LABEL, base.VALUE, base.PRIMARY, base.HERO}
+    check("only scales from the type scale are used (%s)" % sorted(scales),
+          scales <= allowed, "stray: %s" % sorted(scales - allowed))
 
     print()
     print("== the power-on sweep")

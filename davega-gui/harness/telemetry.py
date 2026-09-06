@@ -109,7 +109,19 @@ class Board(_Board):
             # the display accumulates them - but screens render them, so they
             # belong in the frame the screens are tested against.
             max_erpm=0.0, avg_erpm=0.0, time_riding_ms=0,
-            lifetime_tacho=0, lifetime_wh=0.0)
+            lifetime_tacho=0, lifetime_wh=0.0,
+            # Link health, and the accumulated session. The runner publishes
+            # these under a prefix - s_ for this ride, l_ for lifetime - so a
+            # screen reads them like any other field and never holds a
+            # reference to an accumulator.
+            link_ok=True,
+            s_trip_km=0.0, s_riding_ms=0, s_elapsed_ms=0, s_max_kph=0.0,
+            s_avg_kph=0.0, s_min_voltage=0.0, s_max_fet=0.0,
+            s_max_motor_temp=0.0, s_max_current=0.0, s_min_current=0.0,
+            s_max_batt_current=0.0, s_wh_spent=0.0, s_wh_per_km=0.0,
+            s_range_km=0.0,
+            l_trip_km=0.0, l_riding_ms=0, l_max_kph=0.0, l_wh_spent=0.0,
+            l_max_fet=0.0, l_max_current=0.0, l_min_voltage=0.0)
         f.update(over)
         return f
 
@@ -123,7 +135,15 @@ class Board(_Board):
             watt_hours=self.watt_hours * 0.35, tachometer_abs_value=120000,
             max_erpm=self.erpm_for_kph(41.0), avg_erpm=self.erpm_for_kph(19.0),
             time_riding_ms=42 * 60 * 1000,
-            lifetime_tacho=9_400_000, lifetime_wh=612.0)
+            lifetime_tacho=9_400_000, lifetime_wh=612.0,
+            s_trip_km=12.4, s_riding_ms=42 * 60 * 1000,
+            s_elapsed_ms=51 * 60 * 1000, s_max_kph=41.2, s_avg_kph=17.7,
+            s_min_voltage=41.3, s_max_fet=68.0, s_max_motor_temp=79.0,
+            s_max_current=78.0, s_min_current=-54.0, s_max_batt_current=28.0,
+            s_wh_spent=214.0, s_wh_per_km=17.3, s_range_km=19.8,
+            l_trip_km=402.6, l_riding_ms=27 * 3600 * 1000, l_max_kph=46.1,
+            l_wh_spent=7120.0, l_max_fet=84.0, l_max_current=80.0,
+            l_min_voltage=38.9)
 
     def envelope(self):
         """Every extreme worth rendering, named. A real ride produces few of
@@ -196,4 +216,15 @@ class Board(_Board):
             "time_riding_ms": (0, 99 * 3600 * 1000),
             "lifetime_tacho": (0, 99_999_999),
             "lifetime_wh": (0.0, 99999.0),
+            "s_trip_km": (0.0, 999.9), "s_max_kph": (0.0, 60.0),
+            "s_avg_kph": (0.0, 50.0), "s_min_voltage": (0.0, 50.4),
+            "s_max_fet": (0.0, 120.0), "s_max_motor_temp": (0.0, 120.0),
+            "s_max_current": (0.0, 100.0), "s_min_current": (-100.0, 0.0),
+            "s_max_batt_current": (0.0, 60.0), "s_wh_spent": (0.0, 9999.0),
+            "s_wh_per_km": (0.0, 99.9), "s_range_km": (0.0, 199.9),
+            "s_riding_ms": (0, 99 * 3600 * 1000),
+            "l_trip_km": (0.0, 99999.0), "l_max_kph": (0.0, 60.0),
+            "l_wh_spent": (0.0, 999999.0), "l_max_fet": (0.0, 120.0),
+            "l_max_current": (0.0, 100.0), "l_min_voltage": (0.0, 50.4),
+            "l_riding_ms": (0, 9999 * 3600 * 1000),
         }[field]

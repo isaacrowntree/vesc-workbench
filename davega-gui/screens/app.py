@@ -58,7 +58,11 @@ class App:
     def screen(self):
         key, cls = self.screens[self.index]
         if key not in self._live:
-            self._live[key] = cls(self.theme)
+            # Every screen is told the whole set and its place in it, so it
+            # can draw the page dots that make five views read as one
+            # instrument rather than five unrelated ones.
+            names = tuple(k for k, _ in self.screens)
+            self._live[key] = cls(self.theme, names, self.index)
         return self._live[key]
 
     def current(self):
