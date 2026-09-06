@@ -10,6 +10,28 @@
 # with a dead screen on the deck.
 
 
+LIFETIME_PATH = "/data/gui-lifetime.json"
+SAVE_EVERY_MS = 5 * 60 * 1000        # five minutes
+
+
+def _read_json(path):
+    try:
+        import ujson
+        with open(path) as fh:
+            return ujson.load(fh)
+    except Exception:                            # noqa: BLE001
+        return {}
+
+
+def _write_json(path, obj):
+    try:
+        import ujson
+        with open(path, "w") as fh:
+            ujson.dump(obj, fh)
+    except Exception:                            # noqa: BLE001
+        pass
+
+
 def _dash():
     import gc
     from frozen.buttons import BUTTON_UP
@@ -27,6 +49,7 @@ def _dash():
     from gui.panels import (RangeScreen, OverviewScreen, SessionScreen,
                             LifetimeScreen)
     from gui.runner import Runner
+    from gui.session import Session, Resistance
     from machine import UART
     import utime
 
@@ -65,13 +88,33 @@ def _dash():
 
     d = device.attach()
     app = App(screens, board, theme, menu, light=light)
-    uart = UART(2, 115200, tx=16, rx=17)
+    # tx 17 / rx 16 - the reverse of what VescComm's own attributes suggest,
+    # and the difference between reading the board and reading nothing. A
+    # firmware-7 reply is 79 bytes, so the buffer has to be bigger than the
+    # reference firmware's 70.
+    uart = UART(2, 115200, tx=17, rx=16, rxbuf=256, timeout=100)
     buttons = user_input.attach()
 
+    session = Session(board)
+    lifetime = Session(board, lifetime=True).load(_read_json(LIFETIME_PATH))
+    resistance = Resistance(board.cells)
+
     gc.collect()
-    Runner(app, d, uart, board, buttons, utime.ticks_ms, utime.ticks_diff,
-           utime.sleep_ms, vesc, esc_count).run()
-    return True
+    runner = Runner(app, d, uart, board, buttons, utime.ticks_ms,
+                    utime.ticks_diff, utime.sleep_ms, vesc, esc_count,
+                    session=session, lifetime=lifetime, resistance=resistance)
+
+    # Lifetime totals are worth keeping across a power cycle; a ride is not,
+    # and writing every frame would wear the flash for nothing.
+    last_save = utime.ticks_ms()
+    while True:
+        runner.step()
+        if utime.ticks_diff(utime.ticks_ms(), last_save) > SAVE_EVERY_MS:
+            lifetime.merge(session)
+            session.reset()
+            _write_json(LIFETIME_PATH, lifetime.to_dict())
+            last_save = utime.ticks_ms()
+        utime.sleep_ms(50)
 
 
 def _save_light(app, value):

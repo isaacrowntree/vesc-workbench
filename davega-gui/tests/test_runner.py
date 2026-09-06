@@ -21,6 +21,7 @@ from screens.input import Buttons, DOWN, ENTER          # noqa: E402
 from screens.riding import Riding                       # noqa: E402
 from screens.panels import RangeScreen                  # noqa: E402
 from runner import Runner, STALE_MS                     # noqa: E402
+from screens.session import Session, Resistance          # noqa: E402
 
 fails = []
 
@@ -85,9 +86,14 @@ class Rig:
                        self.board, "nazare", sweep=sweep)
         self.buttons = Buttons(lambda: tuple(self.pins), lambda: self.t)
         clock = Clock(self)
+        self.session = Session(self.board)
+        self.lifetime = Session(self.board, lifetime=True)
+        self.resistance = Resistance(self.board.cells)
         self.runner = Runner(self.app, self.d, self.uart, self.board,
                              self.buttons, clock, lambda a, c: a - c,
-                             self.advance, vesc, esc_count=2)
+                             self.advance, vesc, esc_count=2,
+                             session=self.session, lifetime=self.lifetime,
+                             resistance=self.resistance)
 
     def advance(self, ms):
         self.t += ms
@@ -201,6 +207,28 @@ def main():
         steps += 1
     check("sweep completed through the loop (%d steps)" % steps,
           r.app.state == SCREEN and steps < 200)
+
+    print()
+    print("== the session and the Rint model are wired into the loop")
+    r = Rig(reply=build(input_voltage=48.0, rpm=20000, avg_input_current=0.0,
+                        temp_fet_filtered=44.0))
+    r.runner.step()
+    r.advance(1000)
+    r.uart.reply = build(input_voltage=46.88, rpm=20000,
+                         avg_input_current=28.0, temp_fet_filtered=52.0)
+    for _ in range(4):
+        r.runner.step()
+        r.advance(1000)
+    check("session accumulated", r.runner.frame["s_elapsed_ms"] > 0)
+    check("peak temperature reached the frame",
+          r.runner.frame["s_max_fet"] >= 52.0,
+          "got %r" % r.runner.frame["s_max_fet"])
+    check("internal resistance estimated (%.4f ohm)" % r.resistance.value,
+          r.resistance.value > 0.0)
+    check("charge is compensated, not the raw terminal reading",
+          r.runner.frame["soc"] > r.board.soc_for_voltage(46.88),
+          "%.3f vs %.3f" % (r.runner.frame["soc"] or 0,
+                            r.board.soc_for_voltage(46.88)))
 
     print()
     print("== run() is bounded when asked to be")
