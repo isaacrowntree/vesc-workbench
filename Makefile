@@ -88,6 +88,7 @@ gui-test:
 	@python3 davega-gui/tests/test_vesc.py
 	@python3 davega-gui/tests/test_input.py
 	@python3 davega-gui/tests/test_runner.py
+	@python3 davega-gui/tests/test_session.py
 
 gui-golden:
 	@python3 davega-gui/tests/test_screens.py --update-golden
