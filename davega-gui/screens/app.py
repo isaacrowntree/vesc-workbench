@@ -14,6 +14,12 @@ outside it needs to know how, or that it animates at all.
 """
 from .startup import Splash
 
+
+def _light_key(key):
+    """Themes are addressed by name; the variant rides along as a suffix so a
+    screen only ever needs one string."""
+    return (key or "nazare") + "@light"
+
 UP, DOWN, ENTER = "up", "down", "enter"
 HOLD = "hold"          # enter, held
 
@@ -32,15 +38,16 @@ class App:
     MAX_FRAMES = 400        # a stuck animation must not lock the loop
 
     def __init__(self, screens, board, theme=None, menu=None, sweep=True,
-                 name="NAZARE"):
+                 name="NAZARE", light=False):
         self.screens = list(screens)
         self.board = board
         self.theme = theme
+        self.light = light
         self.name = name
         self.index = 0
         self.menu = menu or Menu()
         self._live = {}
-        self._splash = Splash(theme, name) if sweep else None
+        self._splash = Splash(self._theme_key(), name) if sweep else None
         self.state = SWEEP if sweep else SCREEN
         self._dirty = True
         self._frames = 0
@@ -62,7 +69,8 @@ class App:
             # can draw the page dots that make five views read as one
             # instrument rather than five unrelated ones.
             names = tuple(k for k, _ in self.screens)
-            self._live[key] = cls(self.theme, names, self.index)
+            self._live[key] = cls(self.theme if not self.light
+                                  else _light_key(self.theme), names, self.index)
         return self._live[key]
 
     def current(self):
@@ -113,13 +121,25 @@ class App:
             return False
         return True
 
+    def set_light(self, light):
+        """Day or night. Every cached screen holds colours and a record of
+        what is on the glass; both are wrong now."""
+        self.light = bool(light)
+        self._live = {}
+        if self._splash:
+            self._splash = Splash(self._theme_key(), self.name)
+        self._dirty = True
+
+    def _theme_key(self):
+        return _light_key(self.theme) if self.light else self.theme
+
     def set_theme(self, theme):
         """Switching theme invalidates every cached screen: their colours and
         their record of what is on the glass are both wrong now."""
         self.theme = theme
         self._live = {}
         if self._splash:
-            self._splash = Splash(theme, self.name)
+            self._splash = Splash(self._theme_key(), self.name)
         self._dirty = True
 
     # -- the loop ---------------------------------------------------------

@@ -144,3 +144,103 @@ def separation_cb(a, b):
 # A rider glancing down has to tell these apart at speed, in sunlight.
 MIN_SEPARATION = 20        # warn vs danger, accent vs ink
 MIN_SEPARATION_CB = 14     # the same, with deuteranopia
+
+# On a light ground every warm colour darkens toward the same brown, and
+# under deuteranopia amber and red share a hue - so danger is driven much
+# darker than the contrast bar requires. Lightness is the channel that still
+# works when hue does not.
+DANGER_LIGHT = 11.0
+
+
+def toward_hue(c, hue, amount=0.7):
+    """Rotate a colour toward a target hue, keeping saturation and value.
+
+    Used for danger on light themes: a deuteranope sees amber and red as the
+    same hue, so red is pulled toward crimson-magenta, which they can still
+    separate. It still reads as danger to everyone else.
+    """
+    h, s, v = _to_hsv(c)
+    d = ((hue - h + 540) % 360) - 180
+    return _from_hsv((h + d * amount) % 360, min(1.0, s + 0.1), v)
+
+
+DANGER_HUE = 335.0
+
+
+# -- deriving a light variant ------------------------------------------------
+# A dark dash is right at dusk and wrong at noon. Rather than hand-author ten
+# more palettes and hope they hold, each light variant is derived from its dark
+# one and then held to exactly the same tests - contrast, semantic separation,
+# and colour blindness. Anything that fails is a bug in the derivation, not a
+# matter of taste.
+
+def mix(c, target, t):
+    ar, ag, ab = unpack(c)
+    br, bg, bb = unpack(target)
+    return rgb(int(ar + (br - ar) * t),
+               int(ag + (bg - ag) * t),
+               int(ab + (bb - ab) * t))
+
+
+def _to_hsv(c):
+    r, g, b = [v / 255.0 for v in unpack(c)]
+    mx, mn = max(r, g, b), min(r, g, b)
+    v = mx
+    s = 0.0 if mx == 0 else (mx - mn) / mx
+    if mx == mn:
+        h = 0.0
+    elif mx == r:
+        h = (60 * ((g - b) / (mx - mn)) + 360) % 360
+    elif mx == g:
+        h = 60 * ((b - r) / (mx - mn)) + 120
+    else:
+        h = 60 * ((r - g) / (mx - mn)) + 240
+    return h, s, v
+
+
+def _from_hsv(h, s, v):
+    i = int(h / 60) % 6
+    f = h / 60 - int(h / 60)
+    p, q, t = v * (1 - s), v * (1 - s * f), v * (1 - s * (1 - f))
+    r, g, b = ((v, t, p), (q, v, p), (p, v, t),
+               (p, q, v), (t, p, v), (v, p, q))[i]
+    return rgb(int(r * 255), int(g * 255), int(b * 255))
+
+
+def deepen_until(c, ground, target_ratio, limit=40):
+    """Darken a colour until it clears `target_ratio`, keeping its hue.
+
+    Mixing toward black also drains saturation, and on a light ground that
+    makes every warm colour converge on the same brown - which is how eight of
+    ten derived light themes ended up unable to tell "warm" from "fault".
+    Dropping value while raising saturation keeps a theme's orange orange and
+    its red red.
+    """
+    h, s0, v0 = _to_hsv(c)
+    for i in range(limit + 1):
+        t = i / float(limit)
+        out = _from_hsv(h, min(1.0, s0 + t * 0.6), v0 * (1 - t * 0.9))
+        if contrast(out, ground) >= target_ratio:
+            return out
+    return _from_hsv(h, 1.0, 0.08)
+
+
+def darken_until(c, ground, target_ratio, limit=40):
+    return deepen_until(c, ground, target_ratio, limit)
+
+
+def lighten_until(c, ground, target_ratio, limit=40):
+    for i in range(limit + 1):
+        out = mix(c, WHITE, i / float(limit))
+        if contrast(out, ground) >= target_ratio:
+            return out
+    return WHITE
+
+
+def paper(tint, amount=0.06):
+    """A light ground with a little of the theme's own colour in it.
+
+    Pure white reads as unconsidered and glares; a ground carrying a trace of
+    the accent reads as chosen and sits better under the same accent.
+    """
+    return mix(WHITE, tint, amount)

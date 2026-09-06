@@ -7,6 +7,12 @@ protocol is small and the open-source DAVEga firmware documents it exactly:
     request  02 01 04 40 84 03      start, len, COMM_GET_VALUES, crc16, stop
     reply    02 <len> 04 <payload> <crc-hi> <crc-lo> 03
 
+Two things the reference firmware cannot tell you, because it predates them:
+the reply from firmware 7 is 79 bytes, not the 70 its buffer allows - the
+payload grew as fields were appended - and on this display the UART is
+tx 17 / rx 16, which is the reverse of what `VescComm`'s own attributes
+suggest. Both were found by asking the board.
+
 Field offsets below are lifted from `vesc_comm_standard.cpp` in janpom/davega
 (GPL-3.0) - read, not reverse-engineered. Offsets count from the start byte, so
 the command id sits at 2 and the first field at 3.
@@ -100,7 +106,7 @@ def request(uart):
     uart.write(GET_VALUES)
 
 
-def read(uart, deadline_ms, ticks_ms, ticks_diff, max_len=70, max_spins=2000):
+def read(uart, deadline_ms, ticks_ms, ticks_diff, max_len=128, max_spins=2000):
     """Collect one reply. Mirrors the reference implementation: read until the
     frame is complete by its own declared length, then stop.
 

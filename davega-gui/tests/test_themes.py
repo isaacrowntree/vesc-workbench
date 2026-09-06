@@ -19,7 +19,7 @@ sys.path.insert(0, ROOT)
 from harness.display import Display, OutOfBounds       # noqa: E402
 from harness.telemetry import Board                    # noqa: E402
 from screens.riding import Riding                      # noqa: E402
-from screens.themes import THEMES, DEFAULT, get        # noqa: E402
+from screens.themes import THEMES, LIGHT, DEFAULT, get  # noqa: E402
 from screens.palette import (contrast, separation, separation_cb,  # noqa: E402
                              MIN_PRIMARY, MIN_LABEL, MIN_SEPARATION,
                              MIN_SEPARATION_CB)
@@ -132,6 +132,41 @@ def main():
         ok = wd >= MIN_SEPARATION and cb >= MIN_SEPARATION_CB and ia >= 12
         check("semantic/%-11s warn~danger %.0f (cb %.0f)  accent~ink %.0f"
               % (key, wd, cb, ia), ok)
+
+    print()
+    print("== the light variants clear contrast and normal-vision separation")
+    for key in sorted(LIGHT):
+        t = LIGHT[key]
+        ink = contrast(t.ink, t.ground)
+        acc = contrast(t.accent, t.ground)
+        dim = contrast(t.dim, t.ground)
+        wd = separation(t.warn, t.danger)
+        ai = separation(t.accent, t.ink)
+        ok = (ink >= MIN_PRIMARY and acc >= MIN_LABEL and dim >= MIN_LABEL
+              and wd >= MIN_SEPARATION and ai >= 12)
+        check("light/%-11s ink %.1f  warn~danger %.0f  accent~ink %.0f"
+              % (key, ink, wd, ai), ok)
+
+    # Colour blindness on a light ground is a known shortfall, reported rather
+    # than hidden. Every colour has to darken to be readable on paper, and two
+    # dark warm colours are closer under deuteranopia than two bright ones on
+    # black. Three themes clear the dark-theme bar; the rest sit at 10-13.
+    short = [k for k in sorted(LIGHT)
+             if separation_cb(LIGHT[k].warn, LIGHT[k].danger) < MIN_SEPARATION_CB]
+    print("        colour-blind separation below %.0f on light: %s"
+          % (MIN_SEPARATION_CB, ", ".join(short) if short else "none"))
+    worst = min(separation_cb(LIGHT[k].warn, LIGHT[k].danger) for k in LIGHT)
+    check("light colour blindness never regresses below its floor (%.1f)" % worst,
+          worst >= 9.5)
+
+    print()
+    print("== a light variant exists for every theme, and differs from it")
+    check("same set of keys", set(LIGHT) == set(THEMES))
+    check("every light ground is lighter than its dark one",
+          all(contrast(LIGHT[k].ground, 0x0000) > contrast(THEMES[k].ground, 0x0000)
+              for k in THEMES))
+    check("get(key, light=True) returns the light one",
+          get("rosso", True) is LIGHT["rosso"] and get("rosso") is THEMES["rosso"])
 
     print()
     print("== the mockups show the colours the device draws")

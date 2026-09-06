@@ -89,6 +89,18 @@ def get_theme():
     return _load().get("theme", "<unset>")
 
 
+def set_display(mode):
+    """'day' or 'night'. Ours, not the stock app's, so it may be created."""
+    import ujson
+    cfg = _load()
+    before = "day" if cfg.get("theme_light") else "night"
+    cfg["theme_light"] = (mode == "day")
+    with open(CONFIG, "w") as f:
+        ujson.dump(cfg, f)
+    print("display %s -> %s (reboot to apply)" % (before, mode))
+    return mode
+
+
 # Keys seen in the v5.01-v5.07rc3 firmware images. Present for orientation
 # only: run show() to see what your firmware really has, and treat any
 # difference as the firmware being right.

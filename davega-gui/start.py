@@ -39,6 +39,7 @@ def _dash():
         pass
 
     theme = cfg.get("theme", "nazare")
+    light = bool(cfg.get("theme_light", False))
     board = Board(
         cells=cfg.get("cells_in_series", 12),
         parallel=cfg.get("parallel_groups", 4),
@@ -53,13 +54,17 @@ def _dash():
     screens = (("riding", Riding), ("range", RangeScreen),
                ("overview", OverviewScreen), ("session", SessionScreen),
                ("lifetime", LifetimeScreen))
-    menu = Menu([MenuItem("Theme", ["nazare", "rosso", "papaya", "ghost",
-                                    "nevera", "hybrid", "minimal",
-                                    "motorsport", "silver", "toro"],
-                          on_select=_save_theme)])
+    menu = Menu([
+        MenuItem("Theme", ["nazare", "rosso", "papaya", "ghost", "nevera",
+                           "hybrid", "minimal", "motorsport", "silver",
+                           "toro"], on_select=_save_theme),
+        MenuItem("Display", ["night", "day"], on_select=_save_light),
+    ])
+    if light:
+        menu.items[1].pos = 1
 
     d = device.attach()
-    app = App(screens, board, theme, menu)
+    app = App(screens, board, theme, menu, light=light)
     uart = UART(2, 115200, tx=16, rx=17)
     buttons = user_input.attach()
 
@@ -69,18 +74,30 @@ def _dash():
     return True
 
 
+def _save_light(app, value):
+    """Day or night, remembered."""
+    _write_config("theme_light", value == "day")
+    app.set_light(value == "day")
+
+
 def _save_theme(app, value):
     """Menu selections outlive the ride."""
+    _write_config("theme", value)
+    app.set_theme(value)
+
+
+def _write_config(key, value):
+    """One key, in place. Everything else in the file is the stock app's and
+    must survive untouched."""
     try:
         import ujson
         with open("/data/config.json") as fh:
             cfg = ujson.load(fh)
-        cfg["theme"] = value
+        cfg[key] = value
         with open("/data/config.json", "w") as fh:
             ujson.dump(cfg, fh)
     except Exception:                            # noqa: BLE001
         pass
-    app.set_theme(value)
 
 
 try:

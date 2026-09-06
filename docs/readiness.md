@@ -51,8 +51,39 @@ Two things that fell out of reading properly:
   firmware 7 speaks the standard layout and the second motor comes over CAN,
   which is what our proxy counters already showed.
 
-What remains is to run it against the ESC. Nothing about it is speculative any
-more; it is untested, which is a different thing.
+**It has now run against the ESC, and it reads the board correctly.**
+
+```
+temp_fet_filtered           24.80
+temp_motor_filtered         24.80
+avg_motor_current            0.00
+input_voltage               45.80
+tachometer_abs_value         4.00
+```
+
+45.80 V is exactly what `make faults` reported independently, the temperatures
+are ambient on a board at rest, and the tachometer matches the earlier fault
+log. Every offset is right.
+
+Two things the reference firmware could not have told us, both found by asking
+the board:
+
+- **The UART is tx 17 / rx 16** - the reverse of what `VescComm`'s own
+  attributes suggest. With them the other way round the ESC never answers at
+  all, which is where an evening went.
+- **A firmware-7 reply is 79 bytes**, not the 70 the reference buffer allows.
+  The payload grew as fields were appended.
+
+**One thing still blocks it.** The reply arrives truncated at 70 of those 79
+bytes, consistently, so the CRC cannot be checked and `parse()` refuses it -
+correctly, because a number rendered confidently from an unverified packet is
+worse than no number. Every field we render sits inside the first 56 bytes, so
+the data is all there; it is the checksum that is not.
+
+Prime suspect is the LispBM proxy, which owns that UART and rewrites replies on
+their way past. `make lisp-stop` tests it in one command and `make motors-on`
+puts it back, but that needs the phone bridge rather than the display's access
+point - the two cannot be connected at once.
 
 ### 2. Buttons are not wired to hardware
 

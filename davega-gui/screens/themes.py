@@ -15,17 +15,26 @@ from . import palette
 
 
 def _565(hexstr):
+    if isinstance(hexstr, int):
+        return hexstr
     v = int(hexstr.lstrip("#"), 16)
     return palette.rgb((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
 
 
+def _to24(c565):
+    r, g, b = palette.unpack(c565)
+    return (r << 16) | (g << 8) | b
+
+
 class Theme:
     def __init__(self, key, name, lineage, layout, ground, ink, accent,
-                 warn, danger, track, dim=None):
+                 warn, danger, track, dim=None, light=False):
         self.key = key
         self.name = name
         self.lineage = lineage
         self.layout = layout
+        self.light = light
+        self._src = (ground, ink, accent, warn, danger, track, dim)
         self.ground = _565(ground)
         self.ink = _565(ink)
         self.accent = _565(accent)
@@ -44,8 +53,42 @@ class Theme:
     def temp_color(self, t, start):
         return self.danger if t >= start else self.ink
 
+    def as_light(self):
+        """The daylight variant, derived rather than hand-authored.
+
+        Ground and ink swap roles; every other colour is walked toward black
+        until it clears the same contrast bar it had to clear on the dark
+        ground. Hue survives, so a theme still looks like itself.
+        """
+        g, ink, accent, warn, danger, track, dim = self._src
+        ground = palette.paper(_565(accent))
+        return Theme(
+            self.key, self.name, self.lineage, self.layout,
+            ground="#%06X" % _to24(ground),
+            ink="#%06X" % _to24(palette.darken_until(_565(ink) if False else _565(g),
+                                                     ground, palette.MIN_PRIMARY)),
+            accent="#%06X" % _to24(palette.darken_until(_565(accent), ground,
+                                                        palette.MIN_LABEL)),
+            warn="#%06X" % _to24(palette.darken_until(_565(warn), ground,
+                                                      palette.MIN_LABEL)),
+            # Danger is taken further than the bar requires. On a light
+            # ground everything darkens toward the same near-black, and warn
+            # and danger converge; giving danger a higher target keeps them
+            # apart by construction rather than by luck.
+            # Danger is pushed well past the bar. Under deuteranopia amber
+            # and red are the same hue, so the only thing left to tell them
+            # apart is lightness - and a small gap is not enough.
+            danger="#%06X" % _to24(palette.darken_until(
+                palette.toward_hue(_565(danger), palette.DANGER_HUE),
+                ground, palette.DANGER_LIGHT)),
+            track="#%06X" % _to24(palette.mix(ground, _565(g), 0.12)),
+            dim="#%06X" % _to24(palette.darken_until(_565(dim or track), ground,
+                                                     palette.MIN_LABEL)),
+            light=True)
+
     def __repr__(self):
-        return "<Theme %s/%s>" % (self.key, self.layout)
+        return "<Theme %s/%s%s>" % (self.key, self.layout,
+                                    " light" if self.light else "")
 
 
 THEMES = {t.key: t for t in (
@@ -93,6 +136,18 @@ THEMES = {t.key: t for t in (
 
 DEFAULT = "nazare"
 
+#: light variants, derived once at import
+LIGHT = dict((k, t.as_light()) for k, t in THEMES.items())
 
-def get(key):
-    return THEMES.get(key or DEFAULT, THEMES[DEFAULT])
+
+def get(key, light=False):
+    """A theme by name.
+
+    `light` picks the daylight variant, and so does a "@light" suffix on the
+    key - so a screen can be handed one string and never need to know there
+    are two tables.
+    """
+    if key and key.endswith("@light"):
+        key, light = key[:-6], True
+    table = LIGHT if light else THEMES
+    return table.get(key or DEFAULT, table[DEFAULT])

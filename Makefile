@@ -64,6 +64,7 @@ help:
 	@echo "  make davega-settings- print /config.json"
 	@echo "  make davega-gate    - inspect the version gate in frozen.run_standard"
 	@echo "  make davega-theme THEME=nazare - choose a dash theme"
+	@echo "  make davega-display MODE=day|night - light or dark variant"
 	@echo "  (the three above need WEBREPL_PASSWORD=xxxx and this machine on its AP)"
 	@echo ""
 	@echo "Offline:"
@@ -225,6 +226,12 @@ davega-theme:
 	@test -n "$(THEME)" || { echo "usage: make davega-theme THEME=nazare"; exit 1; }
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
 	  -f davega-shim/webrepl/settings.py -e "set_theme('$(THEME)')"
+
+# Day or night, for whichever theme is selected.
+davega-display:
+	@test -n "$(MODE)" || { echo "usage: make davega-display MODE=day|night"; exit 1; }
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega-shim/webrepl/settings.py -e "set_display('$(MODE)')"
 
 davega-gate:
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \

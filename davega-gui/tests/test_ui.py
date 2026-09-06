@@ -302,6 +302,40 @@ def main():
     check("hands over to the real screen cleanly", d.pixels == want.pixels)
 
     print()
+    print("== day and night are a setting, not two builds")
+    dayapp = App([(n, c) for n, c in SCREENS], b, "nazare", sweep=False)
+    d_night = Display()
+    dayapp.render(d_night, b.nominal())
+    dayapp.set_light(True)
+    check("switching drops cached screens", dayapp._live == {})
+    d_day = Display()
+    dayapp.render(d_day, b.nominal())
+    check("the screen actually changes", d_night.pixels != d_day.pixels)
+    check("the light one is lighter",
+          sum(d_day.pixels) > sum(d_night.pixels))
+    check("every screen follows the setting",
+          all(cls("nazare@light").t.light for _, cls in SCREENS))
+    dayapp.set_light(False)
+    d_back = Display()
+    dayapp.render(d_back, b.nominal())
+    check("and switches back", d_back.pixels == d_night.pixels)
+
+    print()
+    print("== every screen renders in every light variant")
+    bad = None
+    for name, cls in SCREENS:
+        for key in sorted(THEMES):
+            try:
+                cls(key + "@light").render(Display(), b.nominal(), b, full=True)
+            except OutOfBounds as e:
+                bad = "%s/%s: %s" % (name, key, e)
+                break
+        if bad:
+            break
+    check("all %d screens x %d light themes" % (len(SCREENS), len(THEMES)),
+          bad is None, bad or "")
+
+    print()
     print("== every screen is reachable")
     app2 = App([(n, c) for n, c in SCREENS], b, "nazare", sweep=False)
     seen = {app2.key}
