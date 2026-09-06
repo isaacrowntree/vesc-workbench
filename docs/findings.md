@@ -201,3 +201,27 @@ So each motor's numbers refresh about five times a second, and that is not the
 shim's ceiling - LispBM sat at 5.5% CPU. The DAVEGA has its own
 `update_interval_ms` setting in `/config.json` ([davega-x](davega-x.md)), and
 that is the thing to change if the readout feels slow.
+
+## Traction control, confirmed in motion
+
+Enabled with `tc_max_diff` 6000 (~7.7 km/h of wheel-speed difference on the
+reference board's 7 pole pairs, 4.2:1 gearing and 0.2 m wheels), ridden hard on
+grass at a golf course. It works, and it does not intrude.
+
+That closes the loop on the [braking
+correction](#traction-control-does-not-affect-braking): the widely repeated
+warning describes behaviour the PPM path does not have, and riding it bears
+that out. The default 3000 would have been about 3.8 km/h, tight enough that
+normal grass slip would keep triggering the taper — which is the "power
+surging" people describe, and probably where the folklore comes from.
+
+## Reloading the shim does not disturb the display
+
+Previously listed as an issue: reloading the script re-runs `uart-start`
+mid-session, so the expectation was that the DAVEGA would drop to its error
+screen and need a button press after every upload.
+
+It does not. Observed across repeated `make motors-on` uploads with the display
+attached and running: the UART blips, the display re-handshakes, the proxy
+answers `COMM_FW_VERSION` with 6.00 as it always does, and telemetry resumes on
+its own. No button press needed.
