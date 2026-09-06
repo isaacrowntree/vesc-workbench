@@ -1,0 +1,17 @@
+# build artefacts
+build/
+
+# your own board data - never publish these
+backups/
+configs/
+configs-7.00/
+screenshots/
+firmware/
+
+# junk
+.DS_Store
+__pycache__/
+*.pyc
+*.rcc
+profiles/local.mk
+configs-to-load/

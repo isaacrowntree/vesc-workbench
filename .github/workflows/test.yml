@@ -1,0 +1,25 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: shim reference + payload layout tests
+        run: cd davega-shim && python3 test_shim.py && python3 test_layout.py
+
+  lisp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: run the shipped Lisp in the upstream LispBM REPL
+        run: ./tests/run-lisp-tests.sh
+
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: confirm the 6.00 vs 7.x protocol claim still holds
+        run: ./tests/protocol-diff.sh

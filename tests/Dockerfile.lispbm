@@ -1,0 +1,12 @@
+# Builds the upstream LispBM REPL so the shim's pure logic can be unit tested
+# off-board. FEATURES="64" because the default target is -m32, which does not
+# exist on arm64 (OrbStack on Apple silicon).
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential git ca-certificates libpng-dev libreadline-dev \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 https://github.com/svenssonjoel/lispBM.git /src/lispBM
+WORKDIR /src/lispBM/repl
+RUN make FEATURES="64" -j"$(nproc)"
+ENV PATH="/src/lispBM/repl:${PATH}"
+WORKDIR /work
