@@ -23,7 +23,8 @@ You are in the right place if you have hit one of these:
   discontinued, so no display-side update is coming.
 - **You want to script VESC config but have no USB access** — the ESC is sealed
   in a deck or enclosure, and **VESC Tool's CLI is serial-only**. This drives it
-  over the phone app's **Wireless Bridge to Computer (TCP)** instead.
+  over the phone app's **Wireless Bridge to Computer (TCP)** instead:
+  [how that works](docs/connecting.md).
 - **You want VESC settings in version control** — read to XML, diff, apply,
   verify, repeat. Both motor sides of a dual ESC.
 - **You are writing LispBM for a VESC** and want to run it in the real
@@ -43,20 +44,31 @@ board-specific part.
 
 ### Scripted config over BLE — no USB
 
-VESC Tool's CLI is serial-only (`--vescPort` calls `connectSerial()`; TCP and a
-socat PTY are both rejected). But `--loadQml` runs arbitrary QML with `VescIf` in
-scope, and `VescIf.connectTcp()` is invokable — so the whole config API is
-reachable over the phone's TCP bridge.
+VESC Tool's CLI is serial-only: `--vescPort` calls `connectSerial()`, and it
+rejects an IP and never completes the handshake over a `socat` PTY. But
+`--loadQml` runs arbitrary QML **inside the application**, with the `VescIf`
+singleton in scope — and `VescIf.connectTcp()` is invokable. Point that at the
+phone app's TCP bridge and the whole configuration API is scriptable:
+
+```
+your laptop  --TCP-->  phone (VESC Tool app)  --BLE-->  ESC
+```
 
 ```sh
 make pull      # read both motor sides' configs to XML
 make apply     # write them back, then verify by reading them again
 ```
 
+**[docs/connecting.md](docs/connecting.md) is the how** — a copy-pasteable
+`connect.qml` that works without the rest of this repo, the `VescIf` API surface
+worth knowing, and the connection failure modes.
+
 > [!IMPORTANT]
 > `setMcconf(true)` is required — with `check=false` the ESC silently ignores the
-> write. And **wait for the ESC to settle after a reboot before reading back**;
-> mid-boot reads return transient values that look exactly like corruption.
+> write. And **wait for the firmware string** before reading anything:
+> `isPortConnected()` goes true seconds before the ESC has sent its parameters,
+> and reads in that window return defaults that look exactly like a wiped
+> controller. Same after any reboot.
 
 ### A LispBM development workflow
 
@@ -122,18 +134,46 @@ See [docs/davega-shim.md](docs/davega-shim.md).
 ## Requirements
 
 - VESC firmware **6.06+** for `cmds-proc` (developed on 7.00)
-- VESC Tool desktop (driven headlessly; macOS and Linux paths both handled)
-- Docker for the Lisp tests
-- A phone running VESC Tool, connected over BLE, Start page → **Wireless Bridge
-  to Computer (TCP)** → Activate Bridge. Desktop VESC Tool must be closed; the
-  bridge takes one client.
+- **VESC Tool desktop** — never opened as a GUI, it is just the Qt runtime the
+  scripts need. macOS and Linux paths are both detected; override with `VESC=`
+- **VESC Tool on a phone**, connected to the ESC over Bluetooth
+- Docker, for the Lisp tests
+- Both devices on the same network, without client isolation (most guest Wi-Fi
+  has it — use a phone hotspot instead)
 
-## Quick start
+## Getting connected
+
+Full walkthrough, including a standalone `connect.qml` you can use without this
+repo: **[docs/connecting.md](docs/connecting.md)**.
+
+**1. On the phone** — connect to the ESC over BLE as normal, then Start page →
+**Wireless Bridge to Computer (TCP)** → **Activate Bridge**. Note the phone's IP;
+the bridge listens on port **65102** and accepts **one client at a time**, so
+close desktop VESC Tool.
+
+**2. On the laptop** — put the address in `profiles/local.mk` (gitignored):
+
+```make
+HOST  ?= 192.168.1.100   # phone running the bridge
+PORT  ?= 65102
+CANID ?= 124             # second motor thread, if you have one
+```
+
+**3. Check before you do anything else:**
 
 ```sh
-make help
-make check
-make test
+make check     # bridge reachable? desktop VESC Tool closed?
+make probe     # connect, report firmware and LispBM stats
+make help      # everything else
+```
+
+`make check` tells the two failure modes apart in a second, instead of leaving
+you to interpret a two-minute timeout.
+
+Every target takes `PROFILE=`:
+
+```sh
+make pull PROFILE=profiles/local.mk
 make davega-debug PROFILE=profiles/nazare-unity.mk
 ```
 
@@ -172,7 +212,8 @@ output. Wheels off the ground for anything involving detection, app config or
 | PPM settings will not stick | `ctrl_type = 0` rejects the sub-config | Set a control type first, then write |
 | A Lisp context dies silently | `(var t ...)` shadows LispBM's `t` and is never resolved from the environment | Rename the variable |
 
-More detail in [docs/known-issues.md](docs/known-issues.md).
+Connection problems specifically: [docs/connecting.md](docs/connecting.md#connection-troubleshooting).
+Everything else: [docs/known-issues.md](docs/known-issues.md).
 
 ## Credits
 
