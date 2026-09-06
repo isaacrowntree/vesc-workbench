@@ -16,6 +16,7 @@ from harness import png                                    # noqa: E402
 from harness.display import Display, OutOfBounds           # noqa: E402
 from harness.telemetry import Board, FIELDS                # noqa: E402
 from screens import riding                                 # noqa: E402
+from screens.riding import Riding                          # noqa: E402
 
 GOLDEN = os.path.join(HERE, "golden")
 UPDATE = "--update-golden" in sys.argv
@@ -23,6 +24,13 @@ UPDATE = "--update-golden" in sys.argv
 # An ESP32 over SPI does not get many of these per frame before the readout
 # feels laggy. Kept low deliberately: the number is the design constraint.
 BUDGET = {"fill_rectangle": 24, "print": 24, "total": 120}
+
+# Pixels pushed, which is what the SPI bus is actually billed for. A full
+# repaint is allowed to be expensive; a steady-state frame, where usually one
+# digit moved, is not. 8% of the frame is generous and still ~14x cheaper than
+# repainting.
+FULL_REPAINT_MAX = 1.30          # x frame area - erase plus content over it
+STEADY_STATE_MAX = 0.07          # x frame area - a ratchet, tighten as it improves
 
 fails = []
 
@@ -69,6 +77,65 @@ def main():
     for op, limit in BUDGET.items():
         n = len(d.calls) if op == "total" else counts.get(op, 0)
         check("budget/%s %d <= %d" % (op, n, limit), n <= limit)
+
+    print()
+    print("== differential rendering is identical to a full repaint")
+    # The dangerous failure mode for partial redraw is stale pixels: a region
+    # whose new value is narrower than the old, leaving part of the previous
+    # value on the glass. Checking every transition between envelope frames
+    # is what makes the optimisation safe to rely on.
+    env = board.envelope()
+    bad = None
+    for from_name, from_frame in env:
+        for to_name, to_frame in env:
+            inc = Display()
+            screen = Riding()
+            screen.render(inc, from_frame, board)      # first paint
+            screen.render(inc, to_frame, board)        # then differential
+            fullpaint = Display()
+            Riding().render(fullpaint, to_frame, board, full=True)
+            if inc.pixels != fullpaint.pixels:
+                bad = "%s -> %s leaves stale pixels" % (from_name, to_name)
+                break
+        if bad:
+            break
+    check("differential == full over %d transitions" % (len(env) ** 2),
+          bad is None, bad or "")
+
+    print()
+    print("== cost of a frame, in pixels pushed")
+    d = Display()
+    screen = Riding()
+    screen.render(d, board.nominal(), board)
+    first = d.px_written
+    check("first paint %d px (%.2fx frame) <= %.2fx"
+          % (first, first / d.full_frame_px, FULL_REPAINT_MAX),
+          first <= d.full_frame_px * FULL_REPAINT_MAX)
+
+    # A tenth of a km/h faster: the speed digits may change, nothing else does.
+    faster = board.frame(**dict(board.nominal(),
+                                rpm=board.erpm_for_kph(26.0)))
+    d2 = Display()
+    d2.px_written = 0
+    screen.render(d2, faster, board)
+    steady = d2.px_written
+    check("steady frame %d px (%.3fx frame) <= %.2fx"
+          % (steady, steady / d2.full_frame_px, STEADY_STATE_MAX),
+          steady <= d2.full_frame_px * STEADY_STATE_MAX,
+          "differential redraw is not saving anything")
+    # At a typical 40 MHz SPI clock, 2 bytes per pixel is ~0.4 us/px.
+    est = lambda px: px * 2 * 8 / 40e6 * 1000
+    print("        full repaint %d px / %d SPI bytes (~%.0f ms of bus time)"
+          % (first, first * 2, est(first)))
+    print("        steady frame %d px / %d SPI bytes (~%.1f ms)  %.0fx cheaper"
+          % (steady, steady * 2, est(steady), first / max(1, steady)))
+
+    # Nothing changed at all: the cheapest case, and it should cost nothing.
+    d3 = Display()
+    d3.px_written = 0
+    screen.render(d3, faster, board)
+    check("unchanged frame costs 0 px", d3.px_written == 0,
+          "repainted %d px for an identical frame" % d3.px_written)
 
     print()
     print("== every field, swept across its whole range")

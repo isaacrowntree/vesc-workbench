@@ -45,6 +45,11 @@ class Display:
     def reset_state(self):
         self.pixels = bytearray(self.width * self.height * 3)
         self.calls = []
+        # What the SPI bus actually pays for. On an ILI9341 a frame costs
+        # roughly two bytes per pixel touched plus a little per-window
+        # overhead, so pixels pushed - not calls made - is the number that
+        # decides whether a screen feels fast.
+        self.px_written = 0
         self.color = 0xFFFF
         self.bg = 0x0000
         self.pos = (0, 0)
@@ -68,8 +73,22 @@ class Display:
                 "%s at (%d,%d) size %dx%d leaves the %dx%d frame"
                 % (what, x, y, w, h, self.width, self.height))
 
+    @property
+    def spi_bytes(self):
+        """2 bytes per pixel, plus ~11 bytes of column/page/write commands for
+        each addressed window."""
+        windows = sum(1 for n, _ in self.calls
+                      if n in ("fill_rectangle", "print", "chars", "pixel", "erase"))
+        return self.px_written * 2 + windows * 11
+
+    @property
+    def full_frame_px(self):
+        return self.width * self.height
+
     def _blit(self, x, y, w, h, color):
         r, g, b = rgb565_to_rgb(color)
+        self.px_written += max(0, min(self.width, x + w) - max(0, x)) * \
+                           max(0, min(self.height, y + h) - max(0, y))
         for yy in range(max(0, y), min(self.height, y + h)):
             base = (yy * self.width + max(0, x)) * 3
             for i in range(max(0, min(self.width, x + w) - max(0, x))):

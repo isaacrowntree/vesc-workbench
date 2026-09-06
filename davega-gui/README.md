@@ -57,6 +57,34 @@ board.
 the screen must stay inside 240×320. This catches "fine until the number reaches
 three digits" without anyone having to think of the case.
 
+## Performance is a test, not a hope
+
+A full repaint of the riding screen pushes **96k pixels — 1.26x the frame area**,
+because erasing paints everything and the content then paints over it. At two
+bytes a pixel that is ~193 kB down the SPI bus to change, usually, one digit.
+
+So screens are described as regions with values, and rendering repaints only
+the regions whose value moved — then only the *character cells* within them
+that differ. Measured by the harness:
+
+| | pixels | SPI bytes | bus time @40 MHz |
+|---|---|---|---|
+| First paint | 96,388 | 193 kB | ~39 ms |
+| Steady frame (speed ticks over) | 4,320 | 8.6 kB | ~1.7 ms |
+| Nothing changed | 0 | 0 | 0 |
+
+**22x cheaper** in the case that happens every frame.
+
+The dangerous failure mode for partial redraw is stale pixels — a new value
+narrower than the old one, leaving part of the previous value on the glass. So
+the suite renders **every transition between envelope frames (81 of them)**
+differentially and asserts the result is byte-identical to a full repaint. That
+test is what makes the optimisation safe to rely on, and it earned its keep
+immediately: it caught the fault banner staying on screen after the ESC
+recovered.
+
+The budgets are ratchets. Tighten them as the numbers improve.
+
 ## Fixtures are derived, not recorded
 
 There is no capture step. The bounds come from configuration read back from the
