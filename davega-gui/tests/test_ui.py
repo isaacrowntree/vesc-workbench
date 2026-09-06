@@ -31,6 +31,19 @@ SCREENS = (("riding", Riding), ("range", RangeScreen),
 MAX_SETTLED_MS = 120
 MAX_FULL_MS = 900
 
+def settle(screen, d, frame, board, limit=40):
+    """Render until nothing is mid-animation.
+
+    With a tween on screen the differential path is deliberately *not*
+    identical to a full repaint on any given frame - it is on its way there.
+    The invariant that matters is that it converges.
+    """
+    for _ in range(limit):
+        screen.render(d, frame, board)
+        if not hasattr(screen, "settled") or screen.settled():
+            return
+
+
 fails = []
 
 
@@ -113,8 +126,8 @@ def main():
         for a, fa in env:
             for c, fc in env:
                 inc, s = Display(), cls("nazare")
-                s.render(inc, fa, b)
-                s.render(inc, fc, b)
+                settle(s, inc, fa, b)
+                settle(s, inc, fc, b)
                 full = Display()
                 cls("nazare").render(full, fc, b, full=True)
                 if inc.pixels != full.pixels:

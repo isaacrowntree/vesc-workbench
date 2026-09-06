@@ -45,6 +45,19 @@ STEADY_STATE_MAX = 0.07          # x frame area - a ratchet, tighten as it impro
 # animation from being designed that the bus cannot deliver.
 ANIMATION_MAX = 0.12
 
+def settle(screen, d, frame, board, limit=40):
+    """Render until nothing is mid-animation.
+
+    With a tween on screen the differential path is deliberately *not*
+    identical to a full repaint on any given frame - it is on its way there.
+    The invariant that matters is that it converges.
+    """
+    for _ in range(limit):
+        screen.render(d, frame, board)
+        if not hasattr(screen, "settled") or screen.settled():
+            return
+
+
 fails = []
 
 
@@ -103,8 +116,8 @@ def main():
         for to_name, to_frame in env:
             inc = Display()
             screen = Riding()
-            screen.render(inc, from_frame, board)      # first paint
-            screen.render(inc, to_frame, board)        # then differential
+            settle(screen, inc, from_frame, board)     # first paint, settled
+            settle(screen, inc, to_frame, board)       # then differential
             fullpaint = Display()
             Riding().render(fullpaint, to_frame, board, full=True)
             if inc.pixels != fullpaint.pixels:
@@ -162,15 +175,20 @@ def main():
     # the sweep stutters.
     screen = Riding("nazare")
     d = Display()
-    screen.render(d, board.frame(input_voltage=board.v_full), board, full=True)
+    start = board.frame(input_voltage=board.v_full)
+    screen.render(d, start, board, full=True)
     target = board.frame(input_voltage=board.v_empty + 2.0)
     worst, frames = 0.0, 0
-    while not screen.settled() and frames < 40:
+    # Render first, then ask: the tween only starts once the new target has
+    # been seen, so checking settled() before the first render sees nothing.
+    while frames < 40:
         d.px_written = d.chars_written = 0
         d.calls = []
         screen.render(d, target, board)
         worst = max(worst, d.est_ms)
         frames += 1
+        if screen.settled():
+            break
     check("the bar animates rather than jumping", 1 < frames <= 12,
           "took %d frames" % frames)
     check("worst animated frame %.0f ms <= %d ms" % (worst, ANIMATION_MS),
@@ -186,10 +204,7 @@ def main():
     live = Display()
     s2 = Riding("nazare")
     s2.render(live, board.frame(input_voltage=board.v_full), board, full=True)
-    for _ in range(20):
-        s2.render(live, target, board)
-        if s2.settled():
-            break
+    settle(s2, live, target, board)
     check("animation lands exactly on the static render",
           live.pixels == settled_img.pixels)
 

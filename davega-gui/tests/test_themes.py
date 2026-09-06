@@ -27,6 +27,19 @@ THEMES_PY = os.path.join(ROOT, "screens", "themes.py")
 BUDGET_FULL = 1.30
 BUDGET_STEADY = 0.07
 
+def settle(screen, d, frame, board, limit=40):
+    """Render until nothing is mid-animation.
+
+    With a tween on screen the differential path is deliberately *not*
+    identical to a full repaint on any given frame - it is on its way there.
+    The invariant that matters is that it converges.
+    """
+    for _ in range(limit):
+        screen.render(d, frame, board)
+        if not hasattr(screen, "settled") or screen.settled():
+            return
+
+
 fails = []
 
 
@@ -60,8 +73,8 @@ def main():
         for from_name, from_frame in env:
             for to_name, to_frame in env:
                 inc, screen = Display(), Riding(key)
-                screen.render(inc, from_frame, board)
-                screen.render(inc, to_frame, board)
+                settle(screen, inc, from_frame, board)
+                settle(screen, inc, to_frame, board)
                 full = Display()
                 Riding(key).render(full, to_frame, board, full=True)
                 if inc.pixels != full.pixels:

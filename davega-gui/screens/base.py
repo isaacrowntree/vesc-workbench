@@ -33,6 +33,10 @@ class RegionScreen:
     def chrome(self, d):
         """Static furniture, painted once. The part that cannot change."""
 
+    def on_full(self, f, b):
+        """A full repaint shows the truth, not a tween on its way to it.
+        Screens with animation snap it here."""
+
     # -- helpers subclasses use -------------------------------------------
 
     def label(self, d, x, y, s):
@@ -58,6 +62,7 @@ class RegionScreen:
             d.set_color(self.t.ink, self.t.ground)
             d.erase()
             self._drawn = {}
+            self.on_full(f, b)
             self.chrome(d)
         for key, x, y, w, h, value_of, paint in self.regions():
             v = value_of(f, b)

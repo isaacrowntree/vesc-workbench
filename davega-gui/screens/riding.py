@@ -51,6 +51,13 @@ class Riding(RegionScreen):
         self._bar = Tweened(0.0, frames=6, snap=2.0)
         RegionScreen.__init__(self, theme)
 
+    def on_full(self, f, b):
+        # Snap: a screen you have just switched to should show where the
+        # battery is, not sweep up to it from wherever the last one left off.
+        target = _bar_target(f, b)
+        self._bar.value = self._bar.target = target
+        self._bar._step = self._bar.frames
+
     def settled(self):
         """True when nothing is mid-animation. A caller that renders only on
         new telemetry uses this to know it still owes frames."""
