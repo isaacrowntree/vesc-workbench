@@ -8,6 +8,7 @@ Item {
     property int    port:  @@PORT@@
     property string dir:   "@@CONFDIR@@"
     property var cmds: null
+    property bool ctrlTypeWasNone: false
     property int step: 0
     property int ticks: 0
     property int waitTicks: 0
@@ -36,9 +37,22 @@ Item {
                 root.log("reading current appconf")
                 root.cmds.setSendCan(false)
                 root.cmds.getAppConf()
-                root.step = 2; root.waitTicks = 12
+                root.step = 15; root.waitTicks = 12
+                break
+            case 15:
+                // While ppm ctrl_type is 0 ("None") the ESC accepts writes to the
+                // PPM block and reads back defaults. Establishing a real control
+                // type first makes the same write stick, so do that pass now and
+                // apply the full config afterwards.
+                root.ctrlTypeWasNone = (VescIf.appConfig().getParamEnum("app_ppm_conf.ctrl_type") === 0)
+                if (!root.ctrlTypeWasNone) { root.step = 2; root.waitTicks = 0; break }
+                root.log("ppm ctrl_type is None - priming it before the real write")
+                VescIf.appConfig().loadXml(root.dir + "/local-appconf.xml", "APPConfiguration")
+                root.cmds.setAppConf()
+                root.step = 2; root.waitTicks = 16
                 break
             case 2:
+                if (root.ctrlTypeWasNone) root.log("priming pass done - applying config for real")
                 root.log("loadXml = " + VescIf.appConfig().loadXml(root.dir + "/local-appconf.xml", "APPConfiguration"))
                 root.log("app_to_use now " + VescIf.appConfig().getParamEnum("app_to_use"))
                 root.log("  after loadXml: ppm ctrl_type=" + VescIf.appConfig().getParamEnum("app_ppm_conf.ctrl_type")

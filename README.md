@@ -29,9 +29,9 @@ You are in the right place if you have hit one of these:
   verify, repeat. Both motor sides of a dual ESC.
 - **You are writing LispBM for a VESC** and want to run it in the real
   interpreter before uploading it to something with wheels on it.
-- **Your throttle stopped working after a LispBM script ran** — see
-  [known issues](docs/known-issues.md); `uart-start` permanently writes
-  `app_to_use = APP_NONE`.
+- **Your throttle stopped working after a LispBM script ran** — `uart-start`
+  permanently writes `app_to_use = APP_NONE`. `make upload-lisp` guards against
+  it; [why](docs/findings.md#uart-start-permanently-flashes-app_to_use--app_none).
 - **You want to know what the remote is actually sending** — `make ppm-watch`
   tells "the remote is not transmitting" apart from "the decoder is not
   running", which look identical in the GUI.
@@ -213,13 +213,15 @@ Board behaviour:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Throttle dead after running Lisp that calls `uart-start` | `app_to_use` flashed to `APP_NONE` | `make apply-appconf`, then re-check `ctrl_type` |
-| PPM settings will not stick | `ctrl_type = 0` rejects the sub-config | Set a control type first, then write |
+| Throttle dead after running Lisp that calls `uart-start` | `app_to_use` flashed to `APP_NONE` | `make apply-appconf` — and `make upload-lisp` now prevents it |
+| PPM settings will not stick | `ctrl_type = 0` rejects the sub-config | `make apply-appconf` primes it automatically |
 | A write "succeeds" but nothing changes | `setMcconf(false)` | Always `setMcconf(true)` |
 | `did you forget to upload the code` | `lispWriteCode` does not land code | `make upload-lisp` (uses `CodeLoader.lispUploadFromPath`) |
 | A Lisp context dies silently | `(var t ...)` shadows LispBM's `t`, which never resolves from the environment | Rename the variable |
 
-Full detail and the reasoning behind each: [docs/known-issues.md](docs/known-issues.md).
+The reasoning behind each, and the firmware source it comes from:
+[docs/findings.md](docs/findings.md). Still-open problems:
+[docs/known-issues.md](docs/known-issues.md).
 
 ## Credits
 

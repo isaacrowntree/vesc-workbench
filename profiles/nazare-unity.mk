@@ -18,3 +18,13 @@ CANID ?= 124             # second motor thread
 # whatever app owns the UART pins, and "PPM and UART" is a single combined app,
 # so choosing 4 takes the PPM decoder down with it and you lose throttle.
 APP_TO_USE ?= 1
+
+# Battery current is deliberately conservative: 30 A / -8 A per side (60 / -16
+# total) rather than the 45 / -12 the 12s6p formula gives, because the pack size
+# is not confirmed from a label. If it is 6P, 45 A/side is exactly at cell spec
+# and 30 costs only top-end power. If it is 4P, 45 A/side is ~22.5 A per cell
+# against a ~15 A rated cell. Low-speed torque is unaffected either way - that
+# comes from motor current, which stays at 80 A/side.
+#
+#   battery max   = (parallel groups x 15) / 2     (dual motor, per ESC)
+#   battery regen = (parallel groups x -4) / 2

@@ -187,4 +187,4 @@ Two that will cost you an afternoon if you get them wrong:
 On a dual controller (a FOCBOX Unity is one STM32 running two motor threads
 over internal CAN) the second side is reached by CAN id. `make pull` reads both;
 set `CANID` in your profile. `COMM_FORWARD_CAN` from LispBM is still
-[unverified](known-issues.md) — the QML path is the one to trust today.
+[unverified](known-issues.md#comm_forward_can-to-a-second-motor-is-unverified) — the QML path is the one to trust today.

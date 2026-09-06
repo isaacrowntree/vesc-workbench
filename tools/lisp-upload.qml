@@ -20,6 +20,7 @@ Item {
     property int waitTicks: 0
     property bool uploadOk: false
     property bool busy: false
+    property bool needsUartGuard: false
 
     function log(m) { console.log("UP: " + m) }
 
@@ -59,6 +60,38 @@ Item {
                 break
             case 1:
                 if (root.code.length === 0) { root.log("FAILED: empty or missing script " + root.codePath); root.step = 9; break }
+                // A script that calls uart-start will have app_to_use rewritten to
+                // APP_NONE in FLASH by the firmware if it is currently UART(3),
+                // PPM_UART(4) or ADC_UART(5) - a dead throttle that survives a
+                // reboot. The value cannot be preserved, so move it somewhere
+                // sane first rather than letting the firmware zero it.
+                root.needsUartGuard = root.code.indexOf("uart-start") >= 0
+                if (root.needsUartGuard) {
+                    root.log("script calls uart-start - checking app_to_use")
+                    root.cmds.setSendCan(false)
+                    root.cmds.getAppConf()
+                    root.step = 11; root.waitTicks = 12
+                    break
+                }
+                root.step = 12; root.waitTicks = 0
+                break
+            case 11:
+                var app = VescIf.appConfig().getParamEnum("app_to_use")
+                // 4 PPM+UART -> 1 PPM only; 5 ADC+UART -> 2 ADC only.
+                // 3 is UART-only: LispBM taking the port leaves no input app, and
+                // APP_NONE is the honest value, so it is left alone.
+                var want = (app === 4) ? 1 : (app === 5) ? 2 : -1
+                if (want < 0) {
+                    root.log("app_to_use=" + app + " - safe, leaving it")
+                    root.step = 12; root.waitTicks = 0
+                    break
+                }
+                root.log("app_to_use=" + app + " would be flashed to APP_NONE; setting " + want)
+                VescIf.appConfig().updateParamEnum("app_to_use", want)
+                root.cmds.setAppConf()
+                root.step = 12; root.waitTicks = 16
+                break
+            case 12:
                 root.step = 2; root.waitTicks = 3
                 root.log("stopping any running script")
                 root.cmds.lispSetRunning(false)
