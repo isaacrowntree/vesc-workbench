@@ -14,8 +14,32 @@ Two things it measures that the device cannot easily tell you:
 
 WIDTH, HEIGHT = 240, 320
 
-# The device's 5x7 glyph cell plus spacing, as frozen.fonts.glcdfont uses it.
+# Two different glyph paths on the device, with different metrics:
+#   scale 1        frozen.fonts.glcdfont, an 8x8 cell
+#   scale > 1      display_util.draw_number against FONT_3X5, which measures
+#                  6 x 10 per character at scale 2 - narrower and taller than
+#                  the 8x8 cell, so modelling both matters for layout fidelity.
 CHAR_W, CHAR_H = 8, 8
+NUM_W, NUM_H = 3, 5
+NUM_GAP = 1
+
+
+def glyph_size(text, scale, numeric=None):
+    """Cell size the device will use. `numeric` overrides the guess, because
+    the choice belongs to the whole string: pulling one digit out of "257 Wh"
+    to repaint it must not switch that character to the numeric font."""
+    if numeric is None:
+        numeric = _numeric(text)
+    if scale > 1 and numeric:
+        return (NUM_W + NUM_GAP) * scale, NUM_H * scale
+    return CHAR_W * scale, CHAR_H * scale
+
+
+def _numeric(t):
+    for c in t:
+        if c not in "0123456789.- ":
+            return False
+    return True
 
 
 def rgb565_to_rgb(c):
@@ -154,24 +178,23 @@ class Display:
         self._bounds(x, y, 1, 1, "pixel")
         self._blit(x, y, 1, 1, self.color if color is None else color)
 
-    def print(self, text, scale=1):
+    def print(self, text, scale=1, numeric=None):
         """Draw at the current position. Glyphs are solid blocks: the harness
         tests layout and overflow, not letterforms."""
         text = str(text)
         self._record("print", text=text, scale=scale, pos=self.pos)
         x, y = self.pos
-        w = len(text) * CHAR_W * scale
-        h = CHAR_H * scale
+        cw, h = glyph_size(text, scale, numeric)
+        w = len(text) * cw
         self._bounds(x, y, w, h, "print(%r)" % text[:24])
         self.chars_written += sum(1 for c in text if c != " ")
         for i, ch in enumerate(text):
             if ch != " ":
-                self._blit(x + i * CHAR_W * scale, y,
-                           (CHAR_W - 1) * scale, h, self.color)
+                self._blit(x + i * cw, y, cw - scale, h, self.color)
         self.pos = (x + w, y)
 
-    def chars(self, text, scale=1):
-        self.print(text, scale)
+    def chars(self, text, scale=1, numeric=None):
+        self.print(text, scale, numeric)
 
     def next_line(self, *a, **kw):
         self._record("next_line")

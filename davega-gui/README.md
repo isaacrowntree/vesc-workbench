@@ -136,8 +136,31 @@ each to the drawing budget. It also checks every colour declared in
 `themes.py` appears in the mockups, so the pictures cannot drift from what the
 device draws.
 
+## Measured on the device
+
+Five screens, ten themes, rendered on a real DAVEGA X:
+
+| | |
+|---|---|
+| Full screen paint | 472-763 ms |
+| Settled frame (speed moves) | **23-29 ms** |
+| Free RAM after imports | ~36 kB |
+
+Large digits go through the device's own `draw_number` against its 3x5 font,
+which is native and roughly three times cheaper than the character path - that
+alone took a settled frame from 82 ms to 25 ms.
+
+The cost model behind the tests came from measuring the panel, not from theory:
+a draw call costs ~2.7 ms of interpreter overhead whatever its size, and a
+character ~8.6 ms. Pixels are nearly free. Optimising a screen means drawing
+fewer characters, then making fewer calls.
+
 ## Status
 
-The harness is real and tested; `riding.py` is a deliberate port of the stock
-layout, there to prove the pipeline before any redesign. Nothing here has been
-run on a device yet.
+Working: five screens, ten themes, buttons and the menu, all of it rendering on
+hardware and covered by 129 host-side assertions.
+
+Not done: **live telemetry**. `VescComm(uart, False)` constructs and
+`get_values(can_id)` sends on tx 16 / rx 17, but the ESC does not answer yet, so
+every screen is still drawing an injected frame. Until that lands there is no
+persistent on-device app either - the renderer is driven from the host.
