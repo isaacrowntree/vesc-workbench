@@ -18,8 +18,10 @@ from harness.telemetry import Board                               # noqa: E402
 from screens.riding import Riding                                 # noqa: E402
 from screens.panels import (RangeScreen, OverviewScreen,          # noqa: E402
                             SessionScreen, LifetimeScreen)
-from screens.app import App, Menu, MenuItem, UP, DOWN, ENTER, HOLD  # noqa: E402
+from screens.app import (App, Menu, MenuItem, UP, DOWN, ENTER,     # noqa: E402
+                         HOLD, SWEEP, SCREEN, MENU)
 from screens.themes import THEMES                                 # noqa: E402
+from screens.startup import Splash, play as play_sweep            # noqa: E402
 
 SCREENS = (("riding", Riding), ("range", RangeScreen),
            ("overview", OverviewScreen), ("session", SessionScreen),
@@ -158,6 +160,11 @@ def main():
     app = App([(n, c) for n, c in SCREENS], b, "nazare",
               Menu([MenuItem("Theme", ["nazare", "rosso", "ghost"]),
                     MenuItem("Units", ["metric", "imperial"])]))
+    check("boots into the sweep", app.state == SWEEP)
+    d0 = Display()
+    frames = app.render(d0, b.nominal())
+    check("sweep runs then hands over (%d frames)" % frames,
+          app.state == SCREEN and frames > 10)
     check("starts on the first screen", app.key == "riding")
     app.press(DOWN)
     check("down moves forward", app.key == "range")
@@ -165,7 +172,7 @@ def main():
     app.press(UP)
     check("up wraps backwards", app.key == "lifetime")
     app.press(ENTER)
-    check("enter opens the menu", app.in_menu)
+    check("enter opens the menu", app.state == MENU)
     d = Display()
     app.render(d, b.nominal())
     check("menu draws", len(d.calls) > 0)
@@ -175,7 +182,20 @@ def main():
     app.press(ENTER)
     check("enter cycles the value", app.menu.items[1].value == "imperial")
     app.press(HOLD)
-    check("hold leaves the menu", not app.in_menu)
+    check("hold leaves the menu", app.state == SCREEN)
+
+    skip = App([(n, c) for n, c in SCREENS], b, "nazare")
+    skip.tick(Display(), b.nominal())
+    skip.press(DOWN)
+    check("a press skips the sweep", skip.state == SCREEN)
+
+    # The loop contract: tick() keeps asking for frames only while something
+    # is animating, so a caller never has to know which screens animate.
+    quiet = App([(n, c) for n, c in SCREENS], b, "nazare", sweep=False)
+    dq = Display()
+    quiet.render(dq, b.nominal())
+    check("a settled screen owes no further frames",
+          quiet.tick(dq, b.nominal()) is False)
 
     d = Display()
     app.render(d, b.nominal())
@@ -188,8 +208,43 @@ def main():
     check("renders in the new theme", len(d.calls) > 0)
 
     print()
+    print("== the power-on sweep")
+    for key in sorted(THEMES):
+        sp = Splash(key)
+        d = Display()
+        worst = [0.0]
+        total = [0.0]
+
+        def watch(_n, d=d, worst=worst, total=total):
+            worst[0] = max(worst[0], d.est_ms)
+            total[0] += d.est_ms
+            d.px_written = d.chars_written = 0
+            d.calls = []
+
+        try:
+            n = play_sweep(sp, d, b, b.nominal(), on_frame=watch)
+        except OutOfBounds as e:
+            check("sweep/%s" % key, False, str(e))
+            continue
+        avg = total[0] / max(1, n)
+        ok = sp.settled() and 1.0 <= total[0] / 1000 <= 4.0 and avg <= 80
+        check("sweep/%-11s %d frames, %.1f s, avg %.0f ms" % (key, n, total[0] / 1000, avg),
+              ok, "settled=%s" % sp.settled())
+
+    # A sweep that leaves the dash showing a made-up number is worse than no
+    # sweep, so the hand-off has to land on the real frame.
+    sp = Splash("nazare")
+    d = Display()
+    play_sweep(sp, d, b, b.nominal())
+    real = Riding("nazare")
+    real.render(d, b.nominal(), b, full=True)
+    want = Display()
+    Riding("nazare").render(want, b.nominal(), b, full=True)
+    check("hands over to the real screen cleanly", d.pixels == want.pixels)
+
+    print()
     print("== every screen is reachable")
-    app2 = App([(n, c) for n, c in SCREENS], b, "nazare")
+    app2 = App([(n, c) for n, c in SCREENS], b, "nazare", sweep=False)
     seen = {app2.key}
     for _ in range(len(SCREENS) - 1):
         app2.press(DOWN)
