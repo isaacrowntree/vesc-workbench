@@ -76,6 +76,18 @@
 (chk "reply still owed"    replies 1)
 (chk "garbage counted"     (if (> dbg-sync 0) 1 0) 1)
 
+(print "== a single stray byte realigns onto the frame behind it")
+; One byte of garbage means the 2-byte header read returns [garbage][start],
+; so the start byte is the SECOND one. Dropping that read would take the frame
+; with it; the reader realigns onto it instead.
+(wire-reset) (reset-counters)
+{ (bufset-u8 wire 0 99) (setq wire-len 1) }
+(looprange i 0 5 (wire-put (req50)))
+(drain)
+(chk "all 5 frames read"  dbg-in  5)
+(chk "all 5 answered"     replies 5)
+(chk "nothing malformed"  dbg-bad 0)
+
 ; summary MUST be last
 (if (= fails 0)
     (print "all lisp tests passed")

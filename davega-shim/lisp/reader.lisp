@@ -55,22 +55,38 @@
     got
 })
 
+; Read the payload and hand off a complete frame sitting in rx.
+(defun frame () {
+    (var n (bufget-u8 rx 1))
+    (if (and (> n 0) (< n 100)
+             (= (rdn rx n 2) n)            ; payload
+             (= (rdn rx 3 (+ n 2)) 3))     ; crc + stop
+        (handle n)
+        { (setq dbg-bad (+ dbg-bad 1)) nil })
+})
+
 ; One iteration of the reader. Returns t if a frame was handled.
 ;
-; The start byte is hunted ONE byte at a time. Asking for both header bytes in
-; a single read means a header that straddles the read boundary returns 1 byte,
-; fails the check, and leaves the length byte to be misread as the next frame's
-; start byte - misaligning everything until a gap in traffic resyncs it. Every
-; miss is a whole request/reply round trip the DAVEGA never gets, which it
-; shows as a readout that updates in lurches.
-(defun pump ()
-    (if (and (= (uart-read rx 1 0 nil 0.1) 1)
-             (= (bufget-u8 rx 0) 2)
-             (= (rdn rx 1 1) 1)) {
-        (var n (bufget-u8 rx 1))
-        (if (and (> n 0) (< n 100)
-                 (= (rdn rx n 2) n)            ; payload
-                 (= (rdn rx 3 (+ n 2)) 3))     ; crc + stop
-            (handle n)
-            { (setq dbg-bad (+ dbg-bad 1)) nil }) }
-        { (setq dbg-sync (+ dbg-sync 1)) nil }))
+; Both header bytes are asked for in one read, because that is one UART call
+; per frame instead of two and the throughput difference is measurable. The
+; cost of that shortcut is that a header straddling the read boundary used to
+; leave the length byte to be misread as the next frame's start byte,
+; misaligning everything until a gap in traffic resynced it - so both ways it
+; can go wrong are handled explicitly rather than dropped:
+;
+;   got 1 byte, and it starts a frame   -> fetch the length byte and continue
+;   got 2 bytes, second one starts one  -> realign onto it and continue
+;
+; Anything else is genuinely not a frame. At idle that is simply the read
+; timing out with the display between polls, which is why dbg-sync is
+; expected to be non-zero on a healthy board.
+(defun pump () {
+    (var k (uart-read rx 2 0 nil 0.1))
+    (cond ((and (= k 2) (= (bufget-u8 rx 0) 2)) (frame))
+          ((and (= k 1) (= (bufget-u8 rx 0) 2))
+           (if (= (rdn rx 1 1) 1) (frame) { (setq dbg-bad (+ dbg-bad 1)) nil }))
+          ((and (= k 2) (= (bufget-u8 rx 1) 2))
+           { (bufset-u8 rx 0 2)
+             (if (= (rdn rx 1 1) 1) (frame) { (setq dbg-bad (+ dbg-bad 1)) nil }) })
+          (t { (setq dbg-sync (+ dbg-sync 1)) nil }))
+})

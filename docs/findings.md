@@ -149,6 +149,32 @@ The remaining 586 frames are the display's CAN discovery scan (`dbg-fwmax` 173),
 probing ids with nothing behind them. Those cannot be answered by anyone, which
 is why a "reply rate" below 100% is the healthy state rather than a defect.
 
+## What the framing fix costs, measured
+
+The safe reader is not free. Measured on a Unity over three 40-45s windows each,
+with the same display polling the same board:
+
+| Reader | Frames in | Telemetry | LispBM CPU |
+|---|---|---|---|
+| Original (one 2-byte header read, short reads ignored) | 12.3/s | 5.1/s | 5.5% |
+| Byte-at-a-time start hunt | 11.3/s | 4.5/s | 7.9% |
+| **Current** (2-byte fast path, explicit recovery) | **11.8/s** | **4.8/s** | **7.3%** |
+
+The byte-at-a-time version was correct and needlessly slow: it paid an extra
+UART call on every frame to defend against a case that happens rarely. The
+current reader keeps the single 2-byte header read as the fast path and handles
+both misalignments explicitly, recovering most of the difference.
+
+What remains - about 4% of throughput and a third more LispBM CPU - buys the
+guarantee the harness demonstrates: without it, one short read at the head of a
+stream can cost every frame behind it. At 7% CPU and an imperceptible 4.8
+updates per second, that is worth paying. The numbers are here so the trade is
+visible rather than assumed.
+
+Note that no desync was observed on this board either before or after:
+`dbg-bad` was 0 throughout and every answerable request was answered. The fix
+is insurance, not a cure for something that was happening.
+
 ## What actually sets the DAVEGA's refresh rate
 
 Measured on a Unity: 12.3 frames/s in, 10.1 replies/s out, of which ~5.1/s are
