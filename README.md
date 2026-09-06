@@ -202,18 +202,20 @@ output. Wheels off the ground for anything involving detection, app config or
 
 ## Troubleshooting
 
+Connection problems — bridge unreachable, reads coming back as defaults —
+are in **[docs/connecting.md](docs/connecting.md#connection-troubleshooting)**.
+
+Board behaviour:
+
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Could not connect` from the CLI | Desktop VESC Tool is open, or the bridge has another client | `make check` |
-| Reads come back as defaults right after a reboot | Read taken mid-boot | Wait for the ESC to settle, read again |
-| A write "succeeds" but nothing changes | `setMcconf(false)` | Always `setMcconf(true)` |
-| `did you forget to upload the code` | `lispWriteCode` does not land code | Use `CodeLoader.lispUploadFromPath` (what `make upload-lisp` does) |
 | Throttle dead after running Lisp that calls `uart-start` | `app_to_use` flashed to `APP_NONE` | `make apply-appconf`, then re-check `ctrl_type` |
 | PPM settings will not stick | `ctrl_type = 0` rejects the sub-config | Set a control type first, then write |
-| A Lisp context dies silently | `(var t ...)` shadows LispBM's `t` and is never resolved from the environment | Rename the variable |
+| A write "succeeds" but nothing changes | `setMcconf(false)` | Always `setMcconf(true)` |
+| `did you forget to upload the code` | `lispWriteCode` does not land code | `make upload-lisp` (uses `CodeLoader.lispUploadFromPath`) |
+| A Lisp context dies silently | `(var t ...)` shadows LispBM's `t`, which never resolves from the environment | Rename the variable |
 
-Connection problems specifically: [docs/connecting.md](docs/connecting.md#connection-troubleshooting).
-Everything else: [docs/known-issues.md](docs/known-issues.md).
+Full detail and the reasoning behind each: [docs/known-issues.md](docs/known-issues.md).
 
 ## Credits
 
