@@ -1,0 +1,22 @@
+; Settable stand-ins for the VESC getters, so a whole ride can be played
+; through the recorder without a board.
+(def S-current 0.0)
+(def S-current-in 0.0)
+(def S-temp-fet 0.0)
+(def S-temp-mot 0.0)
+(def S-vin 0.0)
+(def S-rpm 0.0)
+(def S-duty 0.0)
+(def S-fault 0)
+(def S-can-rpm 0.0)
+
+(defun get-current () S-current)
+(defun get-current-in () S-current-in)
+(defun get-temp-fet () S-temp-fet)
+(defun get-temp-mot () S-temp-mot)
+(defun get-vin () S-vin)
+(defun get-rpm () S-rpm)
+(defun get-duty () S-duty)
+(defun get-fault () S-fault)
+(defun canget-rpm (id) S-can-rpm)
+(defun abs (x) (if (< x 0) (- 0 x) x))

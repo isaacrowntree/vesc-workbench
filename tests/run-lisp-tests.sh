@@ -47,8 +47,12 @@ cat tests/lisp/stubs.lisp build/proxy-sub.lisp davega-shim/lisp/reader.lisp \
     tests/lisp/frames.lisp tests/lisp/harness.lisp tests/lisp/bench_reader.lisp \
     > build/reader-bench-bundle.lisp
 
+# the flight recorder, driven through a scripted ride
+cat tests/lisp/logger_stubs.lisp davega-shim/lisp/logger.lisp \
+    tests/lisp/test_logger.lisp > build/logger-test-bundle.lisp
+
 fail=0
-for b in lisp-test-bundle min-test-bundle proxy-test-bundle reader-test-bundle reader-bench-bundle; do
+for b in lisp-test-bundle min-test-bundle proxy-test-bundle reader-test-bundle reader-bench-bundle logger-test-bundle; do
   echo "--- $b"
   out=$(docker run --rm -v "$PWD/build:/work" "$IMG" \
         repl --terminate -H 2097152 -M 262144 --src "/work/$b.lisp" 2>&1) || true

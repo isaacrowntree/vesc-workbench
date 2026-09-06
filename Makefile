@@ -48,6 +48,8 @@ help:
 	@echo "  make lisp-erase    - erase LispBM + reboot (restores stock PPM/UART behaviour)"
 	@echo "  make reboot        - stop LispBM and reboot the ESC (restarts the PPM app)"
 	@echo "  make faults        - stored fault history + live values, both sides"
+	@echo "  make logger        - upload the flight recorder (replaces the proxy)"
+	@echo "  make log-pull      - print the ride summary it recorded"
 	@echo "  make ppm-watch     - continuous PPM readout, prints only on change"
 	@echo "  make ppm-cal       - live Hoyt Puck calibration (follow the prompts)"
 	@echo "  make upload-hello  - upload+run the minimal LispBM smoke test"
@@ -134,10 +136,26 @@ apply: check
 # motors-off/motors-on targets uploaded files nothing created - and an empty
 # file makes lisp-upload.qml abort while make still reported success, i.e.
 # "motors disabled" printed with the motors still live.
-.SECONDARY: build/davega_proxy_live.lisp build/davega_proxy_safe.lisp
+.SECONDARY: build/davega_proxy_live.lisp build/davega_proxy_safe.lisp build/davega_logger.lisp
 
 # The proxy variants differ only in their output policy, so they are assembled
 # from the shared core rather than kept as two near-identical copies.
+build/davega_logger.lisp: davega-shim/lisp/logger.lisp davega-shim/lisp/logger-main.lisp
+	@mkdir -p $(BUILD)
+	@cat $^ > $@
+
+build/logger.min.lisp: build/davega_logger.lisp tools/minify-lisp.py
+	@mkdir -p $(BUILD)
+	@python3 tools/minify-lisp.py $< $@ $(CANID)
+
+# Flight recorder. Replaces the DAVEGA proxy - one LispBM script at a time.
+logger: check build/logger.min.lisp
+	@echo "uploading the flight recorder (this REPLACES the DAVEGA proxy)"
+	@$(MAKE) --no-print-directory upload-lisp LISP=build/logger.min.lisp
+
+log-pull: check
+	$(call run_qml,log-pull)
+
 build/davega_proxy_%.lisp: davega-shim/lisp/proxy.lisp davega-shim/lisp/reader.lisp davega-shim/lisp/proxy-main.lisp davega-shim/lisp/output-%.lisp
 	@mkdir -p $(BUILD)
 	@cat $^ > $@
