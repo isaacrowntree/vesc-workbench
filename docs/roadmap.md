@@ -66,9 +66,39 @@ it looks like, and that is knowable on the host — the same trick as
 proxy reports counters, collected by `webrepl-run.py`. Gives a real frame time
 to hold the host-side budget honest.
 
-**Snapshot fixtures.** Capture real telemetry from the board with the existing
-tooling and keep it as JSON. Every screen gets tested against the same
-recorded ride: standstill, hard acceleration, regen, fault, low battery.
+**Fixtures from the envelope, not from a ride.** There is no need to capture
+telemetry to test against, because the bounds are already known. The payload is
+`COMM_GET_VALUES`' 25 fields, whose types and scaling are fixed, and the limits
+come from configuration we have read back and verified:
+
+| Field | Range, derived from |
+|---|---|
+| `v_in` | 36.0 – 50.4 V — `l_battery_cut_end` to 12s × 4.2 V; 43.2 V nominal |
+| `current_motor` | ±80 A — `l_current_max` / `l_current_min` |
+| `current_in` | −8 – +30 A — `l_in_current_min` / `l_in_current_max` |
+| `duty_now` | ±1.0, with `l_duty_start` 0.85 the interesting knee |
+| `temp_mos`, `temp_motor` | 20 – 100 °C — ambient to `l_temp_*_end`, via the 85 °C derate start |
+| `rpm` | 0 – ~35,000 erpm — 45 km/h at 7 pole pairs, 4.2:1, 0.2 m wheels |
+| `amp_hours` | 0 – 17 Ah, `watt_hours` 0 – ~734 Wh — 12s4p |
+| `fault_code` | the display's own enumerated list, read out of its firmware |
+
+So fixtures are **generated across that envelope** rather than recorded, which
+is better in every direction that matters here:
+
+- Extremes get covered on purpose. A real ride rarely produces a fault at speed,
+  a 100 °C FET, or full regen at low state of charge — exactly the frames whose
+  rendering you most want to be sure of.
+- They are plain values in git, reviewable in a diff, with no capture step and
+  no hardware.
+- The envelope doubles as a property test: sweep each field across its full
+  range and assert that nothing overflows its cell, clips, or renders outside
+  the 240×320 frame. That catches the whole class of "looks fine until the
+  number reaches three digits" bugs without anyone having to think of the case.
+
+Recorded telemetry is still worth keeping for one narrow purpose — checking that
+a *plausible sequence* of frames animates sensibly, since generated frames say
+nothing about how values move between them. That is a small addition later, not
+the foundation.
 
 ### Sequence
 
