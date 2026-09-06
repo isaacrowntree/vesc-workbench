@@ -206,3 +206,28 @@ entirely. Convert it for your board before choosing a value:
 On the reference board (7 pole pairs, 4.2:1, 0.2 m) the default 3000 is only
 ~3.8 km/h, which is tight for surfaces where some slip is normal - the symptom is
 power surging, not a crash. 6000 (~7.7 km/h) is the value in use here for grass.
+
+## The DAVEGA readout updates in lurches
+
+**Symptom:** speed and current on the display refresh noticeably more slowly
+than they did with a stock firmware-6 setup.
+
+**Cause:** frame desync in the proxy's read loop. The loop asked the UART for
+the two header bytes in one call. When a frame's start byte had arrived but its
+length byte had not, the read returned 1 and the header check failed — leaving
+the length byte in the buffer as the *next* read's start byte. Every frame
+after that was misaligned until a gap in traffic resynced things, and each miss
+is a whole request/reply round trip the display never receives.
+
+**Fix:** hunt for the start byte one byte at a time, so a partial header can
+never consume the following frame. Short payload reads are dropped rather than
+forwarded — a truncated frame fails CRC downstream anyway and costs a reply slot
+on the way there.
+
+**Measuring it:** `make davega-debug` reports `resync skips` and a `telemetry
+rate` in commands per second, which is what the display actually refreshes at.
+A healthy Unity sits well above 3/s; a verdict of `SLOW` means the round trips
+are being lost rather than the display being slow.
+
+Some slowdown is inherent — the proxy adds a LispBM round trip that the native
+UART app does not have — but it should not be visible.

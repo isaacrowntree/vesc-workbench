@@ -116,7 +116,15 @@ apply: check
 # motors-off/motors-on targets uploaded files nothing created - and an empty
 # file makes lisp-upload.qml abort while make still reported success, i.e.
 # "motors disabled" printed with the motors still live.
-build/proxy_%.min.lisp: davega-shim/lisp/davega_proxy_%.lisp tools/minify-lisp.py
+.SECONDARY: build/davega_proxy_live.lisp build/davega_proxy_safe.lisp
+
+# The proxy variants differ only in their output policy, so they are assembled
+# from the shared core rather than kept as two near-identical copies.
+build/davega_proxy_%.lisp: davega-shim/lisp/proxy.lisp davega-shim/lisp/proxy-main.lisp davega-shim/lisp/output-%.lisp
+	@mkdir -p $(BUILD)
+	@cat $^ > $@
+
+build/proxy_%.min.lisp: build/davega_proxy_%.lisp tools/minify-lisp.py
 	@mkdir -p $(BUILD)
 	@python3 tools/minify-lisp.py $< $@ $(CANID)
 

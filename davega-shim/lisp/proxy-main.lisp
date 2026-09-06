@@ -9,7 +9,8 @@
 (def dbg-ping 0)  ; CAN pings answered locally
 (def dbg-blk 0)   ; blocking-thread commands intercepted
 (def dbg-proc 0)  ; frames handed to the firmware decoder
-(def dbg-bad 0)   ; frames rejected (bad start byte or implausible length)
+(def dbg-bad 0)   ; frames rejected (implausible length, or a short read)
+(def dbg-sync 0)  ; bytes skipped while hunting for a frame start
 (def dbg-c50 0)   ; GET_VALUES_SELECTIVE  (live telemetry)
 (def dbg-c51 0)   ; GET_VALUES_SETUP_SELECTIVE (setup info)
 (def dbg-c0 0)    ; FW_VERSION (the version gate)
@@ -36,16 +37,22 @@
 (cmds-start-stop true)
 (uart-start 115200)
 
-; Frame-aligned read: header [2][len], then payload, then crc+stop. Reading
-; arbitrary chunks means rx[0] is rarely the start byte, so command inspection
-; never fires - cmds-proc tolerates that, our interception does not.
+; Frame-aligned read. Hunt for the start byte ONE byte at a time: asking for
+; two at once means a header that straddles the read boundary swallows the
+; length byte, and every frame after it is misaligned until a gap in traffic
+; resyncs us. Each miss is a whole request/reply round trip the DAVEGA never
+; gets, which shows up as a speed readout that updates in lurches.
+;
+; Short reads are dropped rather than forwarded: a truncated frame fails CRC
+; downstream anyway, and feeding it to cmds-proc costs a reply slot.
 (loopwhile t {
-    (if (and (= (uart-read rx 2 0 nil 0.1) 2) (= (bufget-u8 rx 0) 2)) {
+    (if (and (= (uart-read rx 1 0 nil 0.1) 1)
+             (= (bufget-u8 rx 0) 2)
+             (= (uart-read rx 1 1 nil 0.05) 1)) {
         (var n (bufget-u8 rx 1))
-        (if (not (and (> n 0) (< n 100))) (setq dbg-bad (+ dbg-bad 1)))
-        (if (and (> n 0) (< n 100)) {
-            (uart-read rx n 2 nil 0.05)          ; payload
-            (uart-read rx 3 (+ n 2) nil 0.05)    ; crc + stop
+        (if (and (> n 0) (< n 100)
+                 (= (uart-read rx n 2 nil 0.05) n)          ; payload
+                 (= (uart-read rx 3 (+ n 2) nil 0.05) 3)) { ; crc + stop
             (var id (bufget-u8 rx 2))
             (setq dbg-in (+ dbg-in 1))
             (cond ((= id 50) (setq dbg-c50 (+ dbg-c50 1)))
@@ -63,6 +70,6 @@
                   (var b (bufcreate (+ n 5)))
                   (bufcpy b 0 rx 0 (+ n 5))
                   (cmds-proc b) })
-        })
-    })
+        } (setq dbg-bad (+ dbg-bad 1)))
+    } (setq dbg-sync (+ dbg-sync 1)))
 })
