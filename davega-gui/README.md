@@ -107,6 +107,17 @@ def render(d, frame, board):
     d.print("%3d" % round(board.kph_for_erpm(frame.rpm)), scale=6)
 ```
 
+## Design
+
+[DESIGN.md](DESIGN.md) — the measured constraints, the rule they imply
+(digits snap, gauges sweep), and where the layout ideas come from.
+
+`screens/palette.py` has gradient ramps for state of charge, temperature and
+power flow; `screens/anim.py` has easing and a `Tweened` value that follows a
+target over frames. Both are covered by tests: ramps must stay inside RGB565,
+and an animation must stay inside the per-frame bus budget *and* land
+pixel-identical to a static render of its end value.
+
 ## Status
 
 The harness is real and tested; `riding.py` is a deliberate port of the stock
