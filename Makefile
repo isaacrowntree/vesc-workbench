@@ -56,6 +56,9 @@ help:
 	@echo "  make lisp-stats    - LispBM heap/cpu stats"
 	@echo "  make lisp-stop     - stop the running LispBM script"
 	@echo ""
+	@echo "DAVEGA X display (its own WiFi AP, not the board):"
+	@echo "  make webrepl       - fetch the WebREPL client and open it locally"
+	@echo ""
 	@echo "Offline:"
 	@echo "  make test          - all host-side tests"
 	@echo "  make test-py       - shim reference + payload layout tests"
@@ -153,6 +156,28 @@ lisp-erase: check
 
 reboot: check
 	$(call run_qml,reboot)
+
+# The DAVEGA's access point has no internet, so the WebREPL client has to be
+# on disk before you join it. Fetch it first, then open it from file://.
+WEBREPL := $(BUILD)/webrepl-master/webrepl.html
+
+$(WEBREPL):
+	@mkdir -p $(BUILD)
+	@echo "fetching the WebREPL client..."
+	@curl -sL -o $(BUILD)/webrepl.zip https://github.com/micropython/webrepl/archive/refs/heads/master.zip
+	@unzip -oq $(BUILD)/webrepl.zip -d $(BUILD)
+
+webrepl: $(WEBREPL)
+	@echo "1. hold UP+DOWN while the DAVEGA boots - it raises its own WiFi AP"
+	@echo "2. join that AP (this machine loses the board bridge until you leave)"
+	@echo "3. connect to ws://192.168.4.1:8266 in the page that just opened"
+	@echo ""
+	@echo "then paste davega-shim/webrepl/recon.py and call recon()"
+ifeq ($(UNAME),Darwin)
+	@open $(WEBREPL)
+else
+	@xdg-open $(WEBREPL) >/dev/null 2>&1 || echo "open $(WEBREPL)"
+endif
 
 faults: check
 	$(call run_qml,faults)
