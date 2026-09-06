@@ -47,6 +47,7 @@ help:
 	@echo "  make motors-on     - re-enable motor output"
 	@echo "  make lisp-erase    - erase LispBM + reboot (restores stock PPM/UART behaviour)"
 	@echo "  make reboot        - stop LispBM and reboot the ESC (restarts the PPM app)"
+	@echo "  make faults        - stored fault history + live values, both sides"
 	@echo "  make ppm-watch     - continuous PPM readout, prints only on change"
 	@echo "  make ppm-cal       - live Hoyt Puck calibration (follow the prompts)"
 	@echo "  make upload-hello  - upload+run the minimal LispBM smoke test"
@@ -152,6 +153,9 @@ lisp-erase: check
 
 reboot: check
 	$(call run_qml,reboot)
+
+faults: check
+	$(call run_qml,faults)
 
 ppm-watch: check
 	$(call run_qml,ppm-watch)

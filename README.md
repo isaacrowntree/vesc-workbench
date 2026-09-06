@@ -95,6 +95,7 @@ can report internal counters without needing print output to work.
 
 ```sh
 make davega-debug SECS=60   # health check with a verdict
+make faults                 # stored fault history + live values, both sides
 make ppm-watch              # live remote readout, prints only on change
 make ppm-cal                # guided calibration: neutral / full throttle / full brake
 ```
@@ -199,7 +200,7 @@ and packs get damaged. Run the detection wizard.
 | Config read/write/verify over BLE | ✅ |
 | LispBM upload, test, diagnose | ✅ |
 | DAVEGA version gate bypass | ✅ telemetry live on a Unity, FW 7.00 |
-| `COMM_FORWARD_CAN` to a second motor | ⚠️ unverified — [known issues](docs/known-issues.md) |
+| `COMM_FORWARD_CAN` to a second motor | ✅ verified on hardware — [findings](docs/findings.md#comm_forward_can-to-a-second-motor-works) |
 | Hardware tested | FOCBOX Unity only |
 | DAVEGA X WebREPL scripts | ⚠️ written from the firmware images, never run on a device — [docs](docs/davega-x.md) |
 

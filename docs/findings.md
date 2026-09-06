@@ -125,3 +125,37 @@ the head of a 10-frame stream lost **all ten frames**.
 second — what the display actually refreshes at. A healthy Unity sits well above
 3/s. Some slowdown is inherent, since the proxy adds a LispBM round trip the
 native UART app does not have, but it should not be visible.
+
+## COMM_FORWARD_CAN to a second motor works
+
+Previously listed as unverified. Confirmed on hardware from the proxy's own
+counters, over a single uptime on a FOCBOX Unity with the DAVEGA polling:
+
+```
+dbg-in     3227      frames read from the display
+dbg-out    2641      replies forwarded
+dbg-c50    1319      GET_VALUES_SELECTIVE, local side
+dbg-fw124  1320      FORWARD_CAN aimed at the real second motor
+dbg-c51       1
+dbg-c0        1
+```
+
+`1319 + 1320 + 1 + 1 = 2641`, exactly `dbg-out`. **Every answerable request was
+answered**, including every forward to the second motor — so a reply to a
+`COMM_FORWARD_CAN` does come back through `event-cmds-data-tx` and gets patched
+like any other, as the firmware source suggested it would.
+
+The remaining 586 frames are the display's CAN discovery scan (`dbg-fwmax` 173),
+probing ids with nothing behind them. Those cannot be answered by anyone, which
+is why a "reply rate" below 100% is the healthy state rather than a defect.
+
+## What actually sets the DAVEGA's refresh rate
+
+Measured on a Unity: 12.3 frames/s in, 10.1 replies/s out, of which ~5.1/s are
+telemetry for each of the two motors. The display alternates between the local
+side and the second motor almost exactly 1:1.
+
+So each motor's numbers refresh about five times a second, and that is not the
+shim's ceiling - LispBM sat at 5.5% CPU. The DAVEGA has its own
+`update_interval_ms` setting in `/config.json` ([davega-x](davega-x.md)), and
+that is the thing to change if the readout feels slow.
