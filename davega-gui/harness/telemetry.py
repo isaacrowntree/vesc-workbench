@@ -92,6 +92,17 @@ class Frame(dict):
             raise AttributeError(k)
 
 
+# The DAVEGA's own Li-ion discharge curve, read off frozen.screen_values on the
+# device: eleven cell voltages from empty to full. State of charge is piecewise
+# linear between them, which is a great deal closer to how a pack behaves than
+# a straight line from cutoff to full.
+DISCHARGE_TICKS = {
+    "liion": (3.2, 3.39, 3.48, 3.57, 3.66, 3.75, 3.84, 3.93, 4.02, 4.11, 4.2),
+    "lipo": (3.4, 3.5, 3.64, 3.71, 3.78, 3.85, 3.92, 3.99, 4.06, 4.13, 4.2),
+    "lifepo4": (2.7, 3.1, 3.16, 3.18, 3.2, 3.22, 3.24, 3.26, 3.28, 3.3, 3.6),
+}
+
+
 class Board:
     """A board's configuration, which is what turns raw fields into bounds.
 
@@ -104,7 +115,7 @@ class Board:
                  cell_full=4.2, cell_nominal=3.6, cell_empty=3.0,
                  motor_current=80.0, battery_current=30.0, regen_current=-8.0,
                  pole_pairs=7, gear_ratio=4.2, wheel_m=0.2,
-                 temp_derate_start=85.0, temp_derate_end=100.0):
+                 temp_derate_start=85.0, temp_derate_end=100.0, usable=0.8):
         self.cells = cells
         self.parallel = parallel
         self.cell_ah = cell_ah
@@ -117,6 +128,7 @@ class Board:
         self.pole_pairs = pole_pairs
         self.gear_ratio = gear_ratio
         self.wheel_m = wheel_m
+        self.usable = usable
         self.temp_derate_start = temp_derate_start
         self.temp_derate_end = temp_derate_end
 
@@ -129,6 +141,36 @@ class Board:
     @property
     def watt_hours(self):
         return self.amp_hours * self.v_nominal
+
+    def km_for_tacho(self, tacho):
+        """Tachometer steps to kilometres.
+
+        Six steps per electrical revolution, matching the device's own
+        tachometer_to_km - checked against it rather than derived from first
+        principles, because the first-principles version was out by two.
+        """
+        revs = tacho / (self.pole_pairs * 6.0) / self.gear_ratio
+        return revs * math.pi * self.wheel_m / 1000.0
+
+    def soc_for_voltage(self, volts, cell_type="liion"):
+        """State of charge from pack voltage, along the discharge curve."""
+        ticks = DISCHARGE_TICKS[cell_type]
+        v = volts / self.cells
+        if v <= ticks[0]:
+            return 0.0
+        if v >= ticks[-1]:
+            return 1.0
+        span = 1.0 / (len(ticks) - 1)
+        for i in range(len(ticks) - 1):
+            if v <= ticks[i + 1]:
+                lo, hi = ticks[i], ticks[i + 1]
+                return span * (i + (v - lo) / (hi - lo))
+        return 1.0
+
+    @property
+    def usable_watt_hours(self):
+        """What the display calls max_wh: capacity times the usable fraction."""
+        return self.amp_hours * self.v_nominal * self.usable
 
     def erpm_for_kph(self, kph):
         rev_per_km = 1000.0 / (math.pi * self.wheel_m)
@@ -147,7 +189,12 @@ class Board:
             input_voltage=self.v_nominal, avg_motor_current=0.0,
             avg_input_current=0.0, rpm=0.0, amp_hours=0.0,
             amp_hours_charged=0.0, watt_hours=0.0, watt_hours_charged=0.0,
-            tachometer_abs_value=0, fault=0, can_id=123)
+            tachometer_abs_value=0, fault=0, can_id=123,
+            # Session and lifetime aggregates. The ESC does not send these -
+            # the display accumulates them - but screens render them, so they
+            # belong in the frame the screens are tested against.
+            max_erpm=0.0, avg_erpm=0.0, time_riding_ms=0,
+            lifetime_tacho=0, lifetime_wh=0.0)
         f.update(over)
         return f
 
@@ -158,7 +205,10 @@ class Board:
             avg_motor_current=18.0, avg_input_current=9.0,
             input_voltage=self.v_nominal, temp_fet_filtered=42.0,
             temp_motor_filtered=48.0, amp_hours=self.amp_hours * 0.35,
-            watt_hours=self.watt_hours * 0.35, tachometer_abs_value=120000)
+            watt_hours=self.watt_hours * 0.35, tachometer_abs_value=120000,
+            max_erpm=self.erpm_for_kph(41.0), avg_erpm=self.erpm_for_kph(19.0),
+            time_riding_ms=42 * 60 * 1000,
+            lifetime_tacho=9_400_000, lifetime_wh=612.0)
 
     def envelope(self):
         """Every extreme worth rendering, named. A real ride produces few of
@@ -226,4 +276,9 @@ class Board:
             "tachometer_abs_value": (0, 9999999),
             "fault": (0, len(FAULTS) - 1),
             "can_id": (0, 253),
+            "max_erpm": (0.0, self.erpm_for_kph(60.0)),
+            "avg_erpm": (0.0, self.erpm_for_kph(50.0)),
+            "time_riding_ms": (0, 99 * 3600 * 1000),
+            "lifetime_tacho": (0, 99_999_999),
+            "lifetime_wh": (0.0, 99999.0),
         }[field]

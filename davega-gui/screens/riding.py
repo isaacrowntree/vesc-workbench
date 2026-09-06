@@ -13,19 +13,14 @@ the optimisation safe to trust.
 """
 
 from . import widgets
-from .themes import get as get_theme
+from .base import RegionScreen, W, H, MARGIN, HALF
 
-
-W, H = 240, 320
-MARGIN = 6
-HALF = (W - 2 * MARGIN) // 2
 
 
 def soc(board, volts):
-    """State of charge from pack voltage. Crude on purpose - under load this
-    reads low, which is the honest direction to be wrong in."""
-    span = board.v_full - board.v_empty
-    return max(0.0, min(1.0, (volts - board.v_empty) / span))
+    """State of charge along the pack's discharge curve - the same curve the
+    stock firmware uses, read off the device rather than approximated."""
+    return board.soc_for_voltage(volts)
 
 
 def _speed(f, b):
@@ -40,16 +35,8 @@ def _volts(f, b):
     return "%4.1fV  %3d%%" % (f.input_voltage, round(soc(b, f.input_voltage) * 100))
 
 
-class Riding:
+class Riding(RegionScreen):
     """Regions are (key, x, y, w, h, value_fn, draw_fn)."""
-
-    def __init__(self, theme=None):
-        self._drawn = {}
-        self.t = get_theme(theme)
-        # Built once. Rebuilding the table every frame allocates a dozen
-        # tuples and closures per render, which is free on a host and is not
-        # free on an ESP32 running MicroPython.
-        self._regions = self._build_regions()
 
     # -- element painters --------------------------------------------------
 
@@ -91,9 +78,6 @@ class Riding:
 
     # -- layout ------------------------------------------------------------
 
-    def regions(self):
-        return self._regions
-
     def _build_regions(self):
         hot = lambda f, b: self.t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
         return (
@@ -128,25 +112,6 @@ class Riding:
             d.set_color(self.t.dim, self.t.ground)
             d.set_pos(x, y)
             d.print(label)
-
-    # -- rendering ---------------------------------------------------------
-
-    def render(self, d, f, b, full=False):
-        if full or not self._drawn:
-            d.set_color(self.t.ink, self.t.ground)
-            d.erase()
-            self._drawn = {}
-            self.chrome(d)
-        for key, x, y, w, h, value_of, paint in self.regions():
-            v = value_of(f, b)
-            # A region whose value is unchanged is already correct on the
-            # glass. Repainting it costs SPI bytes and buys nothing.
-            if not full and self._drawn.get(key, object()) == v:
-                continue
-            if full:
-                self._drawn.pop(key, None)
-            paint(d, f, b, v)
-            self._drawn[key] = v
 
 
 def render(d, frame, board, theme=None):

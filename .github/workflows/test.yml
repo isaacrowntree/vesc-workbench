@@ -13,6 +13,8 @@ jobs:
         run: python3 davega-gui/tests/test_screens.py
       - name: DAVEGA theme tests - every theme through the same harness
         run: python3 davega-gui/tests/test_themes.py
+      - name: DAVEGA UI tests - all five screens, buttons, menu, conversions
+        run: python3 davega-gui/tests/test_ui.py
 
   lisp:
     runs-on: ubuntu-latest

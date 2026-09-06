@@ -82,6 +82,7 @@ test-py:
 gui-test:
 	@python3 davega-gui/tests/test_screens.py
 	@python3 davega-gui/tests/test_themes.py
+	@python3 davega-gui/tests/test_ui.py
 
 gui-golden:
 	@python3 davega-gui/tests/test_screens.py --update-golden
