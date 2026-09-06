@@ -133,7 +133,9 @@ So the display is not failing to parse anything. It is refusing to talk, on two
 bytes. The shim proxies every command to the firmware's own decoder via
 `cmds-proc` and rewrites only those two, recomputing the CRC. ~60 lines of Lisp.
 
-See [docs/davega-shim.md](docs/davega-shim.md).
+See [docs/davega-shim.md](docs/davega-shim.md). For the display itself — its
+hardware, its `/config.json` settings, and what is still downloadable from the
+vendor — see [docs/davega-x.md](docs/davega-x.md).
 
 ## Requirements
 
