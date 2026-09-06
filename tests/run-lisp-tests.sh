@@ -33,11 +33,17 @@ PY
 
 # the proxy has its own bundle
 sed 's/@@CANID@@/124/' davega-shim/lisp/proxy.lisp > build/proxy-sub.lisp
-cat tests/lisp/stubs.lisp build/proxy-sub.lisp tests/lisp/test_proxy.lisp \
-    > build/proxy-test-bundle.lisp
+cat tests/lisp/stubs.lisp build/proxy-sub.lisp tests/lisp/frames.lisp \
+    tests/lisp/test_proxy.lisp > build/proxy-test-bundle.lisp
+
+# integration: the real reader driven through a fake UART. The harness comes
+# after the proxy core so its uart-read/cmds-proc/reply-ping win.
+cat tests/lisp/stubs.lisp build/proxy-sub.lisp davega-shim/lisp/reader.lisp \
+    tests/lisp/frames.lisp tests/lisp/harness.lisp tests/lisp/test_reader.lisp \
+    > build/reader-test-bundle.lisp
 
 fail=0
-for b in lisp-test-bundle min-test-bundle proxy-test-bundle; do
+for b in lisp-test-bundle min-test-bundle proxy-test-bundle reader-test-bundle; do
   echo "--- $b"
   out=$(docker run --rm -v "$PWD/build:/work" "$IMG" \
         repl --terminate --src "/work/$b.lisp" 2>&1) || true

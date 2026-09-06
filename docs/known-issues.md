@@ -212,22 +212,31 @@ power surging, not a crash. 6000 (~7.7 km/h) is the value in use here for grass.
 **Symptom:** speed and current on the display refresh noticeably more slowly
 than they did with a stock firmware-6 setup.
 
-**Cause:** frame desync in the proxy's read loop. The loop asked the UART for
-the two header bytes in one call. When a frame's start byte had arrived but its
-length byte had not, the read returned 1 and the header check failed — leaving
-the length byte in the buffer as the *next* read's start byte. Every frame
-after that was misaligned until a gap in traffic resynced things, and each miss
-is a whole request/reply round trip the display never receives.
+**Cause:** the proxy's read loop assumed a UART hands you the number of bytes
+you asked for. It does not — it hands you what has arrived. Two consequences,
+both of which cost whole request/reply round trips:
+
+1. The two header bytes were read in one call. When a frame's start byte had
+   arrived but its length byte had not, the read returned 1, the header check
+   failed, and the length byte was left to be misread as the *next* frame's
+   start byte. Everything after that was misaligned until a gap in traffic
+   resynced it.
+2. A short payload read was treated as a corrupt frame rather than a slow one,
+   and the partial frame was forwarded to `cmds-proc` anyway.
 
 **Fix:** hunt for the start byte one byte at a time, so a partial header can
-never consume the following frame. Short payload reads are dropped rather than
-forwarded — a truncated frame fails CRC downstream anyway and costs a reply slot
-on the way there.
+never consume the frame behind it, and accumulate reads (`rdn`) until the
+requested count arrives or the UART goes quiet.
 
-**Measuring it:** `make davega-debug` reports `resync skips` and a `telemetry
-rate` in commands per second, which is what the display actually refreshes at.
-A healthy Unity sits well above 3/s; a verdict of `SLOW` means the round trips
-are being lost rather than the display being slow.
+**How bad it was:** `tests/lisp/test_reader.lisp` drives the real reader through
+a fake UART that can deliver a split header. Against the old loop, one 1-byte
+short read at the head of a 10-frame stream loses **all ten frames**. Against
+the current reader, all ten are answered.
 
-Some slowdown is inherent — the proxy adds a LispBM round trip that the native
-UART app does not have — but it should not be visible.
+**Measuring it on the board:** `make davega-debug` reports `resync skips` and a
+`telemetry rate` in commands per second, which is what the display actually
+refreshes at. A healthy Unity sits well above 3/s; a verdict of `SLOW` means the
+round trips are being lost rather than the display being slow.
+
+Some slowdown is inherent — the proxy adds a LispBM round trip the native UART
+app does not have — but it should not be visible.

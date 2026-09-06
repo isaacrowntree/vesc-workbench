@@ -79,6 +79,10 @@ make lisp-stop / lisp-erase                 # stop or remove
 make test-lisp                              # run it in the real interpreter
 ```
 
+There is an integration harness too: `tests/lisp/test_reader.lisp` drives the
+real UART reader through a fake serial line that can split a frame header
+across reads, so framing and resync are tested rather than assumed.
+
 Scripts are tested by running them in the **upstream LispBM REPL** (Docker),
 not by transcribing them into another language. `tools/minify-lisp.py` strips
 them before upload, because upload happens in 384-byte chunks with a 1-second

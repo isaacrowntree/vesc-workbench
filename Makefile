@@ -120,7 +120,7 @@ apply: check
 
 # The proxy variants differ only in their output policy, so they are assembled
 # from the shared core rather than kept as two near-identical copies.
-build/davega_proxy_%.lisp: davega-shim/lisp/proxy.lisp davega-shim/lisp/proxy-main.lisp davega-shim/lisp/output-%.lisp
+build/davega_proxy_%.lisp: davega-shim/lisp/proxy.lisp davega-shim/lisp/reader.lisp davega-shim/lisp/proxy-main.lisp davega-shim/lisp/output-%.lisp
 	@mkdir -p $(BUILD)
 	@cat $^ > $@
 
