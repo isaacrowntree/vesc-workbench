@@ -13,6 +13,32 @@ see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
+## Is this what you're looking for?
+
+You are in the right place if you have hit one of these:
+
+- **"supported vesc firmware versions 5.x to 6.x - press any button to restart"** —
+  a **DAVEGA X** stuck in a boot loop after a **VESC firmware 7** update. The
+  [shim](docs/davega-shim.md) fixes it without downgrading. DAVEGA is
+  discontinued, so no display-side update is coming.
+- **You want to script VESC config but have no USB access** — the ESC is sealed
+  in a deck or enclosure, and **VESC Tool's CLI is serial-only**. This drives it
+  over the phone app's **Wireless Bridge to Computer (TCP)** instead.
+- **You want VESC settings in version control** — read to XML, diff, apply,
+  verify, repeat. Both motor sides of a dual ESC.
+- **You are writing LispBM for a VESC** and want to run it in the real
+  interpreter before uploading it to something with wheels on it.
+- **Your throttle stopped working after a LispBM script ran** — see
+  [known issues](docs/known-issues.md); `uart-start` permanently writes
+  `app_to_use = APP_NONE`.
+- **You want to know what the remote is actually sending** — `make ppm-watch`
+  tells "the remote is not transmitting" apart from "the decoder is not
+  running", which look identical in the GUI.
+
+Tested on a **FOCBOX Unity** (dual motor, internal CAN) on a **LaCroix Nazaré**,
+firmware **7.00**. The tooling is hardware-agnostic; the profile is the only
+board-specific part.
+
 ## What it gives you
 
 ### Scripted config over BLE — no USB
@@ -133,6 +159,20 @@ and packs get damaged. Run the detection wizard.
 This writes motor controller configuration and can enable or disable motor
 output. Wheels off the ground for anything involving detection, app config or
 `app-disable-output`. Verify the throttle before riding.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Could not connect` from the CLI | Desktop VESC Tool is open, or the bridge has another client | `make check` |
+| Reads come back as defaults right after a reboot | Read taken mid-boot | Wait for the ESC to settle, read again |
+| A write "succeeds" but nothing changes | `setMcconf(false)` | Always `setMcconf(true)` |
+| `did you forget to upload the code` | `lispWriteCode` does not land code | Use `CodeLoader.lispUploadFromPath` (what `make upload-lisp` does) |
+| Throttle dead after running Lisp that calls `uart-start` | `app_to_use` flashed to `APP_NONE` | `make apply-appconf`, then re-check `ctrl_type` |
+| PPM settings will not stick | `ctrl_type = 0` rejects the sub-config | Set a control type first, then write |
+| A Lisp context dies silently | `(var t ...)` shadows LispBM's `t` and is never resolved from the environment | Rename the variable |
+
+More detail in [docs/known-issues.md](docs/known-issues.md).
 
 ## Credits
 
