@@ -9,7 +9,7 @@
 #
 # Always run `backup()` before `update()`. There is no undo and no vendor.
 
-CONFIG = "/config.json"
+CONFIG = "/data/config.json"
 
 
 def _load():
@@ -26,7 +26,7 @@ def show():
     return cfg
 
 
-def backup(path="/config.backup.json"):
+def backup(path="/data/config.backup.json"):
     """Copy /config.json aside on the device. Do this first, every time."""
     import ujson
     cfg = _load()
@@ -36,7 +36,7 @@ def backup(path="/config.backup.json"):
     return path
 
 
-def restore(path="/config.backup.json"):
+def restore(path="/data/config.backup.json"):
     import ujson
     with open(path) as f:
         cfg = ujson.load(f)
