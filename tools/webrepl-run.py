@@ -126,7 +126,10 @@ class WS:
         """
         out = b""
         end = time.time() + timeout
-        while not (out.rstrip().endswith(b">") and b"\x04" in out):
+        # Two 0x04s bracket the result: one ends stdout, one ends stderr.
+        # Stopping at the first ">" is wrong - a traceback says "<stdin>",
+        # and a frame boundary landing after it truncates the error.
+        while not (out.endswith(b">") and out.count(b"\x04") >= 2):
             if time.time() > end:
                 raise TimeoutError("raw REPL did not finish, got %r" % out[-300:])
             try:

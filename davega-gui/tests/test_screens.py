@@ -17,6 +17,7 @@ from harness.display import Display, OutOfBounds           # noqa: E402
 from harness.telemetry import Board, FIELDS                # noqa: E402
 from screens import riding                                 # noqa: E402
 from screens.riding import Riding                          # noqa: E402
+from screens import anim, palette                          # noqa: E402
 
 GOLDEN = os.path.join(HERE, "golden")
 UPDATE = "--update-golden" in sys.argv
@@ -31,6 +32,11 @@ BUDGET = {"fill_rectangle": 24, "print": 24, "total": 120}
 # repainting.
 FULL_REPAINT_MAX = 1.30          # x frame area - erase plus content over it
 STEADY_STATE_MAX = 0.07          # x frame area - a ratchet, tighten as it improves
+
+# An animating frame redraws more than a settled one: a sweeping value can move
+# several digits at once. Still bounded, and the bound is what stops an
+# animation from being designed that the bus cannot deliver.
+ANIMATION_MAX = 0.12
 
 fails = []
 
@@ -136,6 +142,56 @@ def main():
     screen.render(d3, faster, board)
     check("unchanged frame costs 0 px", d3.px_written == 0,
           "repainted %d px for an identical frame" % d3.px_written)
+
+    print()
+    print("== animation stays inside the bus budget")
+    # Animating means redrawing every frame, so the per-frame cost is the
+    # whole question. A tween that blows the budget is a tween that stutters.
+    screen = Riding()
+    d = Display()
+    screen.render(d, board.frame(), board)          # first paint, from rest
+    t = anim.Tweened(0.0, frames=10)
+    t.set(45.0)
+    worst = 0
+    frames = 0
+    while not t.settled:
+        kph = t.advance()
+        frames += 1
+        d.px_written = 0
+        screen.render(d, board.frame(rpm=board.erpm_for_kph(kph)), board)
+        worst = max(worst, d.px_written)
+    check("animation ran %d frames" % frames, frames == 10)
+    check("worst animated frame %d px (%.3fx) <= %.2fx"
+          % (worst, worst / d.full_frame_px, ANIMATION_MAX),
+          worst <= d.full_frame_px * ANIMATION_MAX)
+    print("        worst frame ~%.1f ms of bus time; %d fps is affordable"
+          % (worst * 2 * 8 / 40e6 * 1000, int(1000 / max(0.1, worst * 2 * 8 / 40e6 * 1000))))
+
+    # An animation that does not land exactly where a static draw would is a
+    # bug you only see as a stale last digit.
+    endframe = board.frame(rpm=board.erpm_for_kph(45.0))
+    settled = Display()
+    Riding().render(settled, endframe, board, full=True)
+    live = Display()
+    s2 = Riding()
+    s2.render(live, board.frame(), board)
+    for kph in anim.tween(0.0, 45.0, 10):
+        s2.render(live, board.frame(rpm=board.erpm_for_kph(kph)), board)
+    check("animation lands exactly on the static render",
+          live.pixels == settled.pixels)
+
+    print()
+    print("== colour ramps are monotonic and in range")
+    bad = None
+    for name, fn in (("soc", lambda t: palette.soc_color(t)),
+                     ("temp", lambda t: palette.temp_color(20 + t * 80, 85, 100)),
+                     ("power", lambda t: palette.power_color(-80 + t * 160, 80))):
+        for i in range(21):
+            c = fn(i / 20.0)
+            if not (0 <= c <= 0xFFFF):
+                bad = "%s at %.2f gave %r" % (name, i / 20.0, c)
+                break
+    check("ramps stay inside RGB565", bad is None, bad or "")
 
     print()
     print("== every field, swept across its whole range")

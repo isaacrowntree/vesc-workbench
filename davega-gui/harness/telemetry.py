@@ -41,6 +41,47 @@ FAULTS = (
 )
 
 
+# Offsets and widths straight off the device's VESC_VALUES_DESCR: the uctypes
+# descriptor encodes kind in the top bits and offset in the low ones.
+#   0x18000000 | off -> INT16 (big endian)   0x28000000 | off -> INT32
+LAYOUT = (
+    ("temp_fet_filtered", 0, 2, 10.0),
+    ("temp_motor_filtered", 2, 2, 10.0),
+    ("avg_motor_current", 4, 4, 100.0),
+    ("avg_input_current", 8, 4, 100.0),
+    ("duty", 12, 2, 1000.0),
+    ("rpm", 14, 4, 1.0),
+    ("input_voltage", 18, 2, 10.0),
+    ("amp_hours", 20, 4, 10000.0),
+    ("amp_hours_charged", 24, 4, 10000.0),
+    ("watt_hours", 28, 4, 10000.0),
+    ("watt_hours_charged", 32, 4, 10000.0),
+    ("tachometer_abs_value", 36, 4, 1.0),
+    ("fault", 40, 1, 1.0),
+    ("can_id", 41, 1, 1.0),
+)
+VALUES_SIZE = 42
+
+
+def encode(frame):
+    """Pack a Frame into the 42 bytes the display parses.
+
+    Lets a host-built frame be pushed into the device's own Vesc object, so
+    the stock screens can be asked to render it and their drawing captured.
+    """
+    buf = bytearray(VALUES_SIZE)
+    for name, off, width, scale in LAYOUT:
+        v = int(round(frame[name] * scale))
+        if width == 1:
+            buf[off] = v & 0xFF
+            continue
+        lo = -(1 << (width * 8 - 1))
+        hi = (1 << (width * 8 - 1)) - 1
+        v = max(lo, min(hi, v))
+        buf[off:off + width] = (v & ((1 << (width * 8)) - 1)).to_bytes(width, "big")
+    return bytes(buf)
+
+
 class Frame(dict):
     """One telemetry sample, in real units."""
 
