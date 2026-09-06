@@ -83,6 +83,22 @@ KNOWN_KEYS = (
     "imperial_units", "distance_units", "consumption_units", "speed_units",
     "temp_units", "orientation", "screen_values", "riding_screen_main",
     "update_interval_ms", "show_total_voltage", "show_unexpected_restarts",
+    "delay_switch_screen_on_stop_secs", "delay_switch_to_bms_screen_secs",
+    # behaviour
+    "rpm_from_esc2", "detect_charger", "vesc_alarm", "voltage_multiplier",
+    "reset_session_on_charge_up", "interpolate_energy", "initial_distance_km",
+    "backup_each_km", "range_ramp_up_km", "get_voltage_from_bms",
+    "max_cell_voltage_diff", "bt_enabled",
     # wifi
     "wifi_ssid", "wifi_password", "wifi_connect_timeout_secs",
 )
+
+
+def use_second_esc(on=True):
+    """Take the speed reading from the second ESC instead of the first.
+
+    Added in firmware v5.06 as "RPM from ESC 2" under Experimental Settings.
+    The display polls both motors either way; this only picks which one the
+    speed calculation uses.
+    """
+    return update(rpm_from_esc2=bool(on))

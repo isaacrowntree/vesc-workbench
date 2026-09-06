@@ -225,3 +225,42 @@ It does not. Observed across repeated `make motors-on` uploads with the display
 attached and running: the UART blips, the display re-handshakes, the proxy
 answers `COMM_FW_VERSION` with 6.00 as it always does, and telemetry resumes on
 its own. No button press needed.
+
+## Speed reading from one motor is a display setting
+
+Previously listed as a limitation: speed is derived from one motor's ERPM, so
+spinning the other wheel by hand moves nothing.
+
+That is a DAVEGA setting, not a constraint. Firmware v5.06 added
+**`rpm_from_esc2`** — "RPM from ESC 2" in the display's Experimental Settings
+menu, and a key in `/config.json`. The changelog entry is "optionally read RPM
+from second ESC"; the string is absent from v5.01 and present in v5.06, which
+dates it exactly.
+
+It was always plausible that the display had the data: the proxy counters show
+it polling both motors almost exactly 1:1 (1319 local, 1320 forwarded to CAN
+124). It was only ever a question of which one it used for the calculation.
+
+## The DAVEGA's boot order, and why start.py is safe
+
+`frozen/main.py` names its boot steps in order:
+
+```
+load_license_key
+is_button_press_and_hold
+should_factory_reset
+maybe_factory_reset
+maybe_webrepl
+exec_custom_start
+boot_fw
+```
+
+Two things follow, and both matter:
+
+1. **`maybe_webrepl` runs before `exec_custom_start`.** WebREPL is entered
+   before any user code executes, so a broken `start.py` cannot lock you out of
+   the device. Hold UP+DOWN at boot and you get a REPL regardless of what you
+   left on the filesystem.
+2. **`exec_custom_start` runs before `boot_fw`.** User code runs before the
+   application starts — which is exactly the ordering the [version-gate
+   patch](davega-x.md#can-you-patch-the-version-gate-itself) needs to work.

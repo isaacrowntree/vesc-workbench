@@ -12,18 +12,20 @@
 #   call through the module's globals at call time. Rebinding the attribute
 #   before the app calls it should therefore take effect.
 #
+#   The ordering is right: frozen/main.py runs its boot steps as
+#       ... maybe_webrepl  exec_custom_start  boot_fw
+#   so this file executes before the application starts.
+#
 # WHY IT MIGHT NOT
-#   - start.py may run after run_standard has already decided.
 #   - The caller may hold its own reference (from ... import ...), in which
 #     case patching the module changes nothing.
 #   - The names may differ on your firmware version.
-#   Any of those makes this a no-op, not a brick. Verify with recon.py first:
+#   Either makes this a no-op, not a brick. Verify with recon.py first:
 #       probe('frozen.run_standard')
 #
 # GETTING OUT
-#   WebREPL mode is entered by holding UP+DOWN at boot, before user code runs,
-#   so you can always get back in and delete this file. Confirm that on your
-#   own device before you rely on it.
+#   maybe_webrepl runs BEFORE exec_custom_start, so holding UP+DOWN at boot
+#   reaches a REPL no matter what this file does. You can always delete it.
 #
 # The proxy shim in this repo is the tested path. This is the cheaper one, if
 # it works - and if it does, please say so.

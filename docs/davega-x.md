@@ -88,7 +88,9 @@ them:
 | Drive | `wheel_diameter_mm`, `wheel_pulley_teeth`, `motor_pulley_teeth`, `motor_pole_pairs`, `motor_count`, `motor_temp_sensor` |
 | Battery | `cells_in_series`, `battery_mah`, `battery_usable_capacity`, `cell_type`, `voltage_source` |
 | Units | `imperial_units`, `distance_units`, `consumption_units`, `speed_units`, `temp_units` |
-| Misc | `orientation`, `screen_values`, `riding_screen_main`, `update_interval_ms`, `show_total_voltage`, `show_unexpected_restarts` |
+| Misc | `orientation`, `screen_values`, `riding_screen_main`, `update_interval_ms`, `show_total_voltage`, `show_unexpected_restarts`, `delay_switch_screen_on_stop_secs`, `delay_switch_to_bms_screen_secs` |
+| Experimental | `rpm_from_esc2`, `detect_charger`, `vesc_alarm`, `voltage_multiplier`, `interpolate_energy` |
+| Other | `reset_session_on_charge_up`, `initial_distance_km`, `backup_each_km`, `range_ramp_up_km`, `get_voltage_from_bms`, `max_cell_voltage_diff`, `bt_enabled` |
 | WiFi | `wifi_ssid`, `wifi_password`, `wifi_connect_timeout_secs` |
 
 Run `show()` on your own device before trusting that list — your firmware is the
@@ -172,20 +174,28 @@ has executed a user `start.py` at boot since v5.03 — that is how
 the normal app when its button is not held, which is the behaviour this depends
 on.
 
-**This is untested.** It fails in three ways, all of them harmless:
+**The ordering works.** `frozen/main.py` names its boot steps in sequence:
 
-- `start.py` may run after `run_standard` has already decided;
+```
+load_license_key  is_button_press_and_hold  should_factory_reset
+maybe_factory_reset  maybe_webrepl  exec_custom_start  boot_fw
+```
+
+`exec_custom_start` runs **before** `boot_fw`, so user code executes before the
+application starts — which is what a patch needs. And `maybe_webrepl` runs
+before `exec_custom_start`, so **a broken `start.py` cannot lock you out**: hold
+UP+DOWN at boot and you reach a REPL regardless of what is on the filesystem.
+That is the escape hatch, confirmed from the firmware rather than assumed.
+
+**It is still untested**, and can fail two ways, both harmless:
+
 - the caller may hold its own reference (`from ... import ...`), so patching the
   module changes nothing;
-- the names may differ on your firmware.
+- the names may differ on your firmware version.
 
-Each of those is a no-op rather than a brick, and the file catches its own
-exceptions so a failed patch cannot stop the display booting. Check the ground
-truth first with `probe('frozen.run_standard')` from `recon.py`.
-
-Before relying on any of it, confirm on your own device that holding UP+DOWN
-still reaches WebREPL **with `start.py` present** — that is the escape hatch
-that makes this reversible.
+Both are a no-op rather than a brick, and the file catches its own exceptions.
+Check the ground truth first with `probe('frozen.run_standard')` from
+`recon.py`.
 
 ## Can you build and flash your own firmware?
 
