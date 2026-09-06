@@ -56,7 +56,7 @@ THEMES = {t.key: t for t in (
 
     Theme("rosso", "Rosso", "inspired by Ferrari", "dial",
           ground="#0A0000", ink="#F5F0E6", accent="#FFD100",
-          warn="#DC3030", danger="#DC3030", track="#3A0000", dim="#987B1E"),
+          warn="#FFB43C", danger="#DC3030", track="#3A0000", dim="#987B1E"),
 
     Theme("toro", "Toro", "inspired by Lamborghini", "shards",
           ground="#0C0F0A", ink="#E8FFD0", accent="#A8FF00",
@@ -64,7 +64,7 @@ THEMES = {t.key: t for t in (
 
     Theme("papaya", "Papaya", "inspired by McLaren", "hairline",
           ground="#050505", ink="#FFFFFF", accent="#FF7A00",
-          warn="#FF7A00", danger="#FF2D2D", track="#1B1B1B", dim="#808080"),
+          warn="#FF7A00", danger="#FF6BB0", track="#1B1B1B", dim="#808080"),
 
     Theme("ghost", "Ghost", "inspired by Koenigsegg", "bare",
           ground="#000000", ink="#F7F5F0", accent="#C9A227",
@@ -79,16 +79,16 @@ THEMES = {t.key: t for t in (
           warn="#5085A0", danger="#E06C5A", track="#233038", dim="#6F8993"),
 
     Theme("minimal", "Minimal", "inspired by Tesla", "bare",
-          ground="#101012", ink="#FFFFFF", accent="#FFFFFF",
-          warn="#8A8A90", danger="#E23C3C", track="#3A3A3E", dim="#8A8A90"),
+          ground="#101012", ink="#FFFFFF", accent="#7FC4FF",
+          warn="#FFC24D", danger="#FF6B6B", track="#3A3A3E", dim="#8A8A90"),
 
     Theme("motorsport", "Motorsport", "inspired by BMW M", "rail",
           ground="#0A0C10", ink="#E9EDF2", accent="#4185D0",
           warn="#E9EDF2", danger="#A56872", track="#1B2028", dim="#79818D"),
 
     Theme("silver", "Silver", "inspired by Mercedes-AMG", "rings",
-          ground="#0F1113", ink="#C8CDD4", accent="#C8CDD4",
-          warn="#8E959F", danger="#D24C54", track="#22262B", dim="#8E959F"),
+          ground="#0F1113", ink="#C8CDD4", accent="#7FAAD8",
+          warn="#E0A65C", danger="#D24C54", track="#22262B", dim="#8E959F"),
 )}
 
 DEFAULT = "nazare"

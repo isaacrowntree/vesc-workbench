@@ -102,3 +102,45 @@ def contrast(fg, bg):
 # in sunlight is a harsher environment than either, so:
 MIN_PRIMARY = 7.0     # speed, battery percentage - the things you must read
 MIN_LABEL = 4.5       # labels and secondary values
+
+
+# -- colour blindness --------------------------------------------------------
+# Red and green are the pair that fails, and a state-of-charge ramp running
+# green through amber to red is the textbook case. Semantic colours therefore
+# have to be separable for the most common form of colour blindness, not just
+# to someone with full colour vision.
+
+def deuteranope(c):
+    """Approximate how an RGB565 colour appears with deuteranopia."""
+    r, g, b = [v / 255.0 for v in unpack(c)]
+
+    def lin(v):
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = lin(r), lin(g), lin(b)
+    L = 17.8824 * r + 43.5161 * g + 4.11935 * b
+    M = 3.45565 * r + 27.1554 * g + 3.86714 * b        # noqa: F841
+    S = 0.0299566 * r + 0.184309 * g + 1.46709 * b
+    M2 = 0.494207 * L + 1.24827 * S
+    out = (0.0809 * L - 0.1305 * M2 - 0.1167 * S,
+           -0.0102 * L + 0.0540 * M2 + 0.1136 * S,
+           -0.0003 * L - 0.0041 * M2 + 0.6935 * S)
+    return tuple(0.0 if v < 0 else 1.0 if v > 1 else v for v in out)
+
+
+def separation(a, b):
+    """How far apart two colours look, roughly 0-100."""
+    ar, ag, ab = unpack(a)
+    br, bg, bb = unpack(b)
+    return (((ar - br) ** 2 + (ag - bg) ** 2 + (ab - bb) ** 2) ** 0.5) / 4.42
+
+
+def separation_cb(a, b):
+    """The same, as a deuteranope sees it."""
+    x, y = deuteranope(a), deuteranope(b)
+    return (sum((p - q) ** 2 for p, q in zip(x, y)) ** 0.5) * 57.7
+
+
+# A rider glancing down has to tell these apart at speed, in sunlight.
+MIN_SEPARATION = 20        # warn vs danger, accent vs ink
+MIN_SEPARATION_CB = 14     # the same, with deuteranopia

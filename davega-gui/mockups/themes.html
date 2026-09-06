@@ -355,7 +355,7 @@
 
   { id: "rosso", name: "Rosso", lineage: "inspired by Ferrari",
     thesis: "<b>The tachometer is the hero.</b> Speed sits inside a full analogue ring with a yellow face and a redline that sweeps into view &mdash; the only theme that gives the circle the whole screen.",
-    cost: "~6.2k px", pal: ["#0A0000", "#DC3030", "#FFD100", "#F5F0E6", "#5A0000"],
+    cost: "~6.2k px", pal: ["#0A0000", "#DC3030", "#FFD100", "#F5F0E6", "#5A0000", "#FFB43C"],
     draw: function (s) {
       bg(s, "#0A0000");
       var cx = 120, cy = 128, r = 96;
@@ -419,7 +419,7 @@
 
   { id: "papaya", name: "Papaya", lineage: "inspired by McLaren",
     thesis: "<b>Precision over drama.</b> Hairline arcs, a single saturated accent, and more black than anything else. Reads like a telemetry readout because that is what it is.",
-    cost: "~4.8k px", pal: ["#050505", "#FF7A00", "#1B1B1B", "#FFFFFF", "#808080", "#FF2D2D"],
+    cost: "~4.8k px", pal: ["#050505", "#FF7A00", "#1B1B1B", "#FFFFFF", "#808080", "#FF6BB0"],
     draw: function (s) {
       bg(s, "#050505");
       el("path", { d: arc(120, 118, 92, -120, 120), fill: "none", stroke: "#1B1B1B", "stroke-width": 2 }, s);
@@ -520,7 +520,7 @@
 
   { id: "minimal", name: "Minimal", lineage: "inspired by Tesla",
     thesis: "<b>One number, then silence.</b> Speed fills the frame; everything else is a thin line of grey until it needs you. Cheapest theme to run and the easiest to read at speed.",
-    cost: "~2.9k px", pal: ["#101012", "#FFFFFF", "#3A3A3E", "#E23C3C", "#8A8A90"],
+    cost: "~2.9k px", pal: ["#101012", "#FFFFFF", "#7FC4FF", "#FFC24D", "#FF6B6B", "#3A3A3E"],
     draw: function (s) {
       bg(s, "#101012");
       text(s, 120, 168, String(F.kph), { size: 150, anchor: "middle", fill: "#FFFFFF", weight: 500 });
@@ -567,7 +567,7 @@
 
   { id: "silver", name: "Silver", lineage: "inspired by Mercedes-AMG",
     thesis: "<b>Layered and restrained.</b> Concentric hairline rings, deep graphite, one red hand. Reads expensive because almost nothing on it is coloured.",
-    cost: "~5.4k px", pal: ["#0F1113", "#C8CDD4", "#8E959F", "#D24C54", "#22262B"],
+    cost: "~5.4k px", pal: ["#0F1113", "#C8CDD4", "#7FAAD8", "#E0A65C", "#D24C54", "#22262B"],
     draw: function (s) {
       bg(s, "#0F1113");
       var cx = 120, cy = 132;

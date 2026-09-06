@@ -20,7 +20,9 @@ from harness.display import Display, OutOfBounds       # noqa: E402
 from harness.telemetry import Board                    # noqa: E402
 from screens.riding import Riding                      # noqa: E402
 from screens.themes import THEMES, DEFAULT, get        # noqa: E402
-from screens.palette import contrast, MIN_PRIMARY, MIN_LABEL   # noqa: E402
+from screens.palette import (contrast, separation, separation_cb,  # noqa: E402
+                             MIN_PRIMARY, MIN_LABEL, MIN_SEPARATION,
+                             MIN_SEPARATION_CB)
 
 MOCKUPS = os.path.join(ROOT, "mockups", "themes.html")
 THEMES_PY = os.path.join(ROOT, "screens", "themes.py")
@@ -116,6 +118,20 @@ def main():
         ok = all(contrast(c, t.ground) >= f for _, c, f in checks)
         check("contrast/%-11s worst %s %.1f:1 (floor %.1f)"
               % (key, worst_name, worst, worst_min), ok)
+
+    print()
+    print("== semantic colours are tellable apart, including colour blind")
+    # A theme can clear every contrast bar and still be useless: if "getting
+    # warm" and "fault" are the same red, or nothing can be highlighted
+    # because the accent is the text colour, the palette cannot carry state.
+    for key in sorted(THEMES):
+        t = THEMES[key]
+        wd = separation(t.warn, t.danger)
+        cb = separation_cb(t.warn, t.danger)
+        ia = separation(t.accent, t.ink)
+        ok = wd >= MIN_SEPARATION and cb >= MIN_SEPARATION_CB and ia >= 12
+        check("semantic/%-11s warn~danger %.0f (cb %.0f)  accent~ink %.0f"
+              % (key, wd, cb, ia), ok)
 
     print()
     print("== the mockups show the colours the device draws")
