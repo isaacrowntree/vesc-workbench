@@ -202,9 +202,10 @@ davega/    code that runs ON the display (and the tools that build it)
 
 `docs/` is the writing: [findings](docs/findings.md),
 [connecting](docs/connecting.md), [the display](docs/davega-x.md),
-[what the panel will draw](docs/theme-layouts.md), and
-[this board](docs/board-provenance.md) — where every default here came from,
-and which of them are measured rather than inherited.
+[what the panel will draw](docs/theme-layouts.md),
+[this board](docs/board-provenance.md) — where every default here came from —
+and [keeping the firmware alive](docs/firmware-archive.md), which records what
+the vendor still serves, what it hashes to, and what may be passed on.
 
 ## Requirements
 
