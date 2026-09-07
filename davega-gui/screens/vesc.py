@@ -117,8 +117,16 @@ def read(uart, deadline_ms, ticks_ms, ticks_diff, max_len=128, max_spins=2000):
     buf = bytearray()
     start = ticks_ms()
     spins = 0
+    # MicroPython's uart.read() blocks for the port's whole timeout when no
+    # data has arrived, so calling it in a poll loop costs that timeout every
+    # pass - measured at 211 ms a read on this board. Asking any() first turns
+    # the loop into a real poll and the read into something that returns
+    # immediately.
+    available = getattr(uart, "any", None)
     while ticks_diff(ticks_ms(), start) < deadline_ms and spins < max_spins:
         spins += 1
+        if available is not None and not available():
+            continue
         chunk = uart.read(max_len - len(buf))
         if chunk:
             buf += chunk

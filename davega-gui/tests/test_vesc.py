@@ -104,6 +104,9 @@ def main():
         def __init__(self, data, chunk=7):
             self.data, self.chunk, self.pos = data, chunk, 0
 
+        def any(self):
+            return len(self.data) - self.pos
+
         def read(self, n):
             if self.pos >= len(self.data):
                 return None
@@ -135,6 +138,26 @@ def main():
     check("dual esc doubles", abs(two["avg_input_current"] - 19.0) < 0.02)
     check("motor current is per-motor, not scaled",
           abs(vesc.parse(build(avg_motor_current=18.0), esc_count=2)["avg_motor_current"] - 18.0) < 0.02)
+
+    print()
+    print("== a uart with no any() still works")
+    # Not every port exposes any(); the reader must fall back to blocking
+    # reads rather than assuming the fast path exists.
+    class Plain:
+        def __init__(self, data):
+            self.data, self.pos = data, 0
+
+        def read(self, n):
+            if self.pos >= len(self.data):
+                return None
+            out = self.data[self.pos:self.pos + n]
+            self.pos += len(out)
+            return out
+
+    clock2 = [0]
+    out = vesc.read(Plain(frame), 500, lambda: clock2.__setitem__(0, clock2[0] + 1) or clock2[0],
+                    lambda a, c: a - c)
+    check("reads the frame without any()", vesc.parse(out) is not None)
 
     print()
     print("== a Unity reply is a different shape, and we know it")

@@ -92,7 +92,10 @@ def _dash():
     # and the difference between reading the board and reading nothing. A
     # firmware-7 reply is 79 bytes, so the buffer has to be bigger than the
     # reference firmware's 70.
-    uart = UART(2, 115200, tx=17, rx=16, rxbuf=256, timeout=100)
+    # A short port timeout matters: uart.read() blocks for it when nothing has
+    # arrived, and at 100 ms that cost 211 ms a telemetry read. At 5 ms, with
+    # the reader asking any() first, the same read takes 17.
+    uart = UART(2, 115200, tx=17, rx=16, rxbuf=256, timeout=5)
     buttons = user_input.attach()
 
     session = Session(board)
