@@ -25,27 +25,33 @@ SPAN = R - L
 SPEED_X, SPEED_Y, SPEED_S = 44, 46, 21
 UNIT_X, UNIT_Y = 196, 158
 
-SLANT_Y, SLANT_H = 178, 40                    # the slanted data block
-AMP_Y = 190
+#: Three slabs, each a label on the left and a value on the right. The
+#: original drawing had them as separate blocks and reading them as a list is
+#: the point - one run-on line of "18A MOT 9A PK 42C" is a different, worse
+#: instrument.
+SLAB_Y, SLAB_H, SLAB_GAP = 176, 22, 3
+SLAB_SLANT = 6                                # each slab leans, none are square
 
-BATT_Y, BATT_H = 230, 18
-BIG_Y, BIG_S = 262, 9
-FAULT_Y, FAULT_H = 262, 50
+BATT_Y, BATT_H = 258, 12
+BIG_Y, BIG_S = 284, 7
+FAULT_Y, FAULT_H = 280, 40
+
+#: The shift light is blocks, not a bar: a solid column tells you how fast you
+#: are going, and a column of discrete lights tells you how close you are to
+#: the top of the range without being read at all.
+RAIL_SEGS = 14
+RAIL_GAP = 3
 
 
 class Layout(Base):
     grid_exceptions = {
         "rail": "shift light, owns the left edge",
         "speed": "the numeral, centred in what the rail leaves",
-        "amps": "inside the slanted block",
+        "motor": "on its slab", "pack": "on its slab", "fet": "on its slab",
         "batt": "spans the body", "pct": "bottom block",
         "range": "paired with pct", "fault": "displaces both",
     }
     overlap_exceptions = {("fault", "pct"), ("fault", "range")}
-    tweens = {"rail": (5, 4.0)}
-
-    def target(self, key, s, f, b):
-        return (RAIL_BOT - RAIL_TOP) * min(1.0, kit.kph(f, b) / 45.0)
 
     def chrome(self, s, d):
         t = s.t
@@ -56,46 +62,83 @@ class Layout(Base):
         for i, col in enumerate((t.accent, t.ink, t.danger)):
             d.fill_rectangle(L + i * third, STRIPE_Y, third, STRIPE_H, col)
 
-        # The slanted block. A wedge, composed once and pushed as bands - a
-        # diagonal costs 2.9 ms a column drawn as rectangles, and nothing at
-        # all drawn into a buffer.
+        # Three slanted slabs, composed once and pushed as bands. A diagonal
+        # costs 2.9 ms a column drawn as rectangles and nothing at all drawn
+        # into a buffer.
         def draw(c):
             c.fill(t.ground)
-            c.wedge([L, R, R, L], [SLANT_Y + 10, SLANT_Y,
-                                   SLANT_Y + SLANT_H, SLANT_Y + SLANT_H + 10],
-                    t.track)
-        bands.paint(d, L, SLANT_Y, SPAN, SLANT_H + 12, draw)
+            for i in range(3):
+                y = SLAB_Y + i * (SLAB_H + SLAB_GAP)
+                c.wedge([L, R, R, L],
+                        [y + SLAB_SLANT, y, y + SLAB_H,
+                         y + SLAB_H + SLAB_SLANT], t.track)
+        bands.paint(d, L, SLAB_Y, SPAN,
+                    3 * (SLAB_H + SLAB_GAP) + SLAB_SLANT, draw)
 
         d.set_color(t.dim, t.ground)
-        for x, y, txt in ((UNIT_X, UNIT_Y, "KM/H"),
-                          (L, BIG_Y - 12, "CHARGE"),
-                          (R - 72, BIG_Y - 12, "RANGE KM")):
-            d.set_pos(x, y)
+        d.set_pos(UNIT_X, UNIT_Y)
+        d.print("KM/H")
+        # The slab captions, on the slab.
+        d.set_color(t.dim, t.track)
+        for i, txt in enumerate(("MOTOR", "PACK", "FET")):
+            d.set_pos(L + 10, SLAB_Y + i * (SLAB_H + SLAB_GAP) + 12)
             d.print(txt)
+        d.set_color(t.dim, t.ground)
+        d.set_pos(L, BIG_Y - 12)
+        d.print("CHARGE")
+        d.set_pos(R - 64, BIG_Y - 12)
+        d.print("RANGE KM")
+
+    def _shift_light(self, s):
+        """Blocks, lighting from the bottom, changing colour near the top."""
+        def paint(d, f, b, v):
+            t = s.t
+            span = RAIL_BOT - RAIL_TOP
+            seg = (span - RAIL_GAP * (RAIL_SEGS - 1)) // RAIL_SEGS
+            for i in range(RAIL_SEGS):
+                y = RAIL_BOT - (i + 1) * seg - i * RAIL_GAP
+                if i >= v:
+                    col = t.track
+                elif i >= RAIL_SEGS - 3:
+                    col = t.danger
+                elif i >= RAIL_SEGS - 6:
+                    col = t.warn
+                else:
+                    col = t.accent
+                d.fill_rectangle(RAIL_X, y, RAIL_W, seg, col)
+        return paint
+
+    def _slab(self, s, key, i, value):
+        """A value right-aligned on its slab, with the caption drawn as
+        chrome on the left."""
+        y = SLAB_Y + i * (SLAB_H + SLAB_GAP)
+        w = 7 * 8                       # four characters and a little air
+        x = R - 10 - w
+        return (key, x, y + 8, w, 10, value,
+                # Cleared to the slab's own colour: a shorter value pads with
+                # blanks, and blanks in the ground colour would cut a notch
+                # out of the furniture underneath.
+                s.value_painter(key, x, y + 8, scale=LABEL, bg=s.t.track))
 
     def regions(self, s):
         return (
             ("fault", L, FAULT_Y, SPAN, FAULT_H, kit.fault_text,
              kit.banner(s, L, FAULT_Y, SPAN, FAULT_H, ("pct", "range"))),
             ("rail", RAIL_X, RAIL_TOP, RAIL_W, RAIL_BOT - RAIL_TOP,
-             lambda f, b: int(s.tw("rail")),
-             kit.vrail(s, "rail", RAIL_X, RAIL_TOP, RAIL_BOT, RAIL_W,
-                       # A shift light: green through amber to red as it fills.
-                       lambda f, b, t: (t.danger if kit.kph(f, b) > 38 else
-                                        t.warn if kit.kph(f, b) > 28
-                                        else t.accent))),
+             lambda f, b: min(RAIL_SEGS,
+                              int(RAIL_SEGS * kit.kph(f, b) / 45.0 + 0.5)),
+             self._shift_light(s)),
             ("speed", SPEED_X, SPEED_Y, bigfont.width("00", SPEED_S),
              bigfont.char_h(SPEED_S), kit.speed_text,
              kit.big(s, "speed", SPEED_X, SPEED_Y, SPEED_S)),
-            ("amps", L + 8, AMP_Y, SPAN - 16, 12,
-             lambda f, b: "%.0fA MOT %.0fA PK %dC"
-                          % (f["avg_motor_current"], f["avg_input_current"],
-                             round(f["temp_fet_filtered"])),
-             # Cleared to the slant's own colour, not to the ground: a shorter
-             # value pads with blanks, and blanks the ground colour would cut a
-             # notch out of the furniture underneath.
-             s.value_painter("amps", L + 8, AMP_Y, scale=LABEL,
-                             bg=s.t.track)),
+            self._slab(s, "motor", 0,
+                       lambda f, b: "%sA" % kit.fit(abs(f["avg_motor_current"]),
+                                                    3)),
+            self._slab(s, "pack", 1,
+                       lambda f, b: "%sA" % kit.fit(abs(f["avg_input_current"]),
+                                                    3)),
+            self._slab(s, "fet", 2,
+                       lambda f, b: "%sC" % kit.fit(f["temp_fet_filtered"], 3)),
             ("batt", L, BATT_Y, SPAN, BATT_H,
              lambda f, b: kit.soc(b, f["input_voltage"], f),
              kit.seg_bar(s, L, BATT_Y, SPAN, BATT_H, segs=10, gap=3)),
@@ -103,8 +146,8 @@ class Layout(Base):
              bigfont.char_h(BIG_S),
              lambda f, b: "" if f["fault"] else kit.charge_text(f, b),
              kit.big(s, "pct", L, BIG_Y, BIG_S)),
-            ("range", R - 72, BIG_Y, bigfont.width("99", BIG_S),
+            ("range", R - 64, BIG_Y, bigfont.width("99", BIG_S),
              bigfont.char_h(BIG_S),
              lambda f, b: "" if f["fault"] else kit.range_text(f, b),
-             kit.big(s, "range", R - 72, BIG_Y, BIG_S)),
+             kit.big(s, "range", R - 64, BIG_Y, BIG_S)),
         )

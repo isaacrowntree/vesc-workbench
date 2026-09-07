@@ -38,8 +38,25 @@ def charge_text(f, b):
     return "%d" % round(100 * soc(b, f["input_voltage"], f))
 
 
+def fit(value, digits=2):
+    """A number in at most `digits` characters, clamped rather than overflowed.
+
+    A region is a fixed box: its width is decided when the layout is built,
+    from the widest value the designer expected. A value one digit wider does
+    not wrap or clip, it draws off the side of the panel - which is a crash in
+    the harness and a smear of pixels on the glass. Clamping is the honest
+    failure: 99 km of range left when there are 140 is wrong by less than the
+    estimate's own error, and it stays inside its box.
+    """
+    n = int(round(value))
+    if n < 0:
+        n = 0
+    ceiling = 10 ** digits - 1
+    return "%d" % (ceiling if n > ceiling else n)
+
+
 def range_text(f, b):
-    return "%d" % round(f["s_range_km"]) if f.get("s_range_km") else "--"
+    return fit(f["s_range_km"]) if f.get("s_range_km") else "--"
 
 
 def fault_text(f, b):
@@ -180,8 +197,13 @@ def quiet(painter):
 # -- curves ---------------------------------------------------------------
 
 def arc_sweep(s, key, cx, cy, r, thickness, a0, a1, colour=None, step=3,
-              under=None, forces=(), unlit=None, redline=None, hot=None):
+              under=None, forces=(), unlit=None, redline=None, hot=None,
+              from_mid=False):
     """A value drawn as an arc.
+
+    `from_mid` fills outward from the middle of the sweep instead of from
+    `a0`, for a gauge whose rest position is the centre - regen one way and
+    drive the other are two different things, not more and less of one.
 
     The arc is repainted whole, from `a0` to wherever it reaches, into a band
     that covers only the part of the dial it can occupy. Painting just the
@@ -220,10 +242,12 @@ def arc_sweep(s, key, cx, cy, r, thickness, a0, a1, colour=None, step=3,
             c.fill(t.ground)
             if under:
                 under(c, t)
+            mid = (a0 + a1) / 2.0
             deg = a0
             while deg <= a1:
                 sin, cos = bands.sincos(deg)
-                if deg <= v:
+                if (mid <= deg <= v or v <= deg <= mid) if from_mid \
+                        else deg <= v:
                     shade = col
                     if redline is not None and deg >= redline and hot is not None:
                         shade = hot

@@ -12,6 +12,7 @@ outside it needs to know how, or that it animates at all.
         while app.tick(display, frame):     # drains any animation
             pass
 """
+from .base import W, H
 from .startup import Splash
 
 
@@ -85,6 +86,8 @@ class App:
         return not hasattr(obj, "settled") or obj.settled()
 
     def _goto(self, state):
+        if self.state == MENU and state != MENU and self.menu.on_close:
+            self.menu.on_close(self)
         self.state = state
         self._dirty = True
 
@@ -105,8 +108,12 @@ class App:
             elif button == DOWN:
                 self.menu.next()
             elif button == ENTER:
+                # `activate` may change the theme, and `set_theme` sets
+                # `_dirty` itself - which is the one case the menu does have
+                # to repaint whole, because every colour on it just changed.
+                # Marking every press dirty meant a full-screen erase for a
+                # cursor move, and a flash each time you pressed anything.
                 self.menu.activate(self)
-            self._dirty = True
             return True
 
         if button == ENTER:
@@ -184,6 +191,13 @@ class MenuItem:
     def value(self):
         return self.values[self.pos] if self.values else None
 
+    @property
+    def position(self):
+        """"3/10", so cycling a long list is navigable rather than a guess."""
+        if not self.values:
+            return ""
+        return "%d/%d" % (self.pos + 1, len(self.values))
+
     def activate(self, app):
         if self.values:
             self.pos = (self.pos + 1) % len(self.values)
@@ -198,9 +212,15 @@ class Menu:
     ROW_H = 28
     TOP = 44
 
-    def __init__(self, items=None):
+    def __init__(self, items=None, on_close=None):
         self.items = items or []
         self.cursor = 0
+        #: Called once when the rider leaves the menu. Settings are applied
+        #: live as they are cycled but persisted here, because cycling ten
+        #: themes one press at a time is ten writes to flash for nine
+        #: settings nobody kept.
+        self.on_close = on_close
+        self._drawn = {}
 
     def next(self):
         if self.items:
@@ -214,22 +234,55 @@ class Menu:
         if self.items:
             self.items[self.cursor].activate(app)
 
+    #: Widest value we will lay out for. Longer ones are cut rather than
+    #: allowed to run off the panel.
+    VAL_X = 128
+    VAL_CHARS = 13
+
     def render(self, d, app, full=True):
+        """Only the rows that changed.
+
+        This used to erase the whole panel and redraw it, and `tick` calls it
+        once per telemetry pass - so the menu wiped and repainted itself five
+        times a second and read as a flicker you could not hold still enough
+        to use. A row is repainted when its highlight or its value changes,
+        and otherwise nothing is drawn at all.
+        """
         t = app.screen().t
-        d.set_color(t.ink, t.ground)
-        d.erase()
-        d.set_color(t.dim, t.ground)
-        d.set_pos(8, 16)
-        d.print("MENU")
+        if full:
+            self._drawn = {}
+            d.set_color(t.ink, t.ground)
+            d.erase()
+            d.set_color(t.dim, t.ground)
+            d.set_pos(8, 16)
+            d.print("MENU")
+            # The way out is a three second hold, which nobody guesses.
+            d.set_pos(8, H - 20)
+            d.print("HOLD TO GO BACK")
+
         for i, item in enumerate(self.items):
-            y = self.TOP + i * self.ROW_H
             selected = i == self.cursor
-            if selected:
-                d.fill_rectangle(0, y - 4, 240, self.ROW_H - 4, t.track)
-            d.set_color(t.ink if selected else t.dim, t.ground)
-            d.set_pos(8, y)
-            d.print(item.label)
-            if item.values:
-                d.set_color(t.accent if selected else t.dim, t.ground)
-                d.set_pos(150, y)
-                d.print(str(item.value))
+            state = (selected, item.value, item.position)
+            if self._drawn.get(i) == state:
+                continue
+            self._drawn[i] = state
+            self._row(d, t, i, item, selected)
+
+    def _row(self, d, t, i, item, selected):
+        y = self.TOP + i * self.ROW_H
+        back = t.track if selected else t.ground
+        d.fill_rectangle(0, y - 4, W, self.ROW_H - 4, back)
+        d.set_color(t.ink if selected else t.dim, back)
+        d.set_pos(8, y)
+        d.print(item.label)
+        if not item.values:
+            return
+        d.set_color(t.accent if selected else t.dim, back)
+        d.set_pos(self.VAL_X, y)
+        d.print(str(item.value)[:self.VAL_CHARS])
+        # Where you are in the list. Ten themes cycled one press at a time is
+        # a guessing game without it.
+        if len(item.values) > 2:
+            d.set_color(t.dim, back)
+            d.set_pos(W - 40, y)
+            d.print(item.position)

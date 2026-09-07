@@ -154,12 +154,23 @@ screens = (("riding", Riding), ("range", RangeScreen),
            ("overview", OverviewScreen), ("session", SessionScreen),
            ("lifetime", LifetimeScreen))
 chosen = []
+saved = {}
+writes = [0]
+
+
+def _remember(a):
+    """Stands in for boot.py's config write, counting how often it happens."""
+    writes[0] += 1
+    saved["theme"] = a.theme
+    saved["theme_light"] = a.light
+
+
 menu = Menu([
     MenuItem("Theme", [DEFAULT] + sorted(k for k in THEMES if k != DEFAULT),
              on_select=lambda app, v: (chosen.append(v), app.set_theme(v))),
     MenuItem("Display", ["night", "day"],
              on_select=lambda app, v: app.set_light(v == "day")),
-])
+], on_close=_remember)
 app = App(screens, board, DEFAULT, menu, sweep=True)
 runner = Runner(app, device.attach(), uart, board,
                 user_input.attach(), utime.ticks_ms, utime.ticks_diff,
@@ -282,13 +293,66 @@ check("a theme can be chosen from the board", bool(chosen),
 if chosen:
     check("and it is not the one we started on", chosen[-1] != DEFAULT,
           "chose %s" % chosen[-1])
+    # The theme change repaints the menu, because every colour on it just
+    # changed. It does not keep repainting: a settled menu draws nothing, and
+    # the screens behind it are rebuilt when the rider leaves.
     d.reset()
     spin(6)
-    check("the new theme repaints the screen", len(d.calls) > 20,
-          "%d calls" % len(d.calls))
+    check("and then the menu settles again", len(d.calls) == 0,
+          "%d calls after the change had landed" % len(d.calls))
+    d.reset()
+    app.press("hold")
+    spin(4)
+    check("leaving the menu repaints the screen in the new theme",
+          len(d.calls) > 20, "%d calls" % len(d.calls))
+    tap(buttons.BUTTON_ENTER)              # back in, for the checks below
 
 
 # ---------------------------------------------------------------- the link
+
+print()
+print("== the config screen")
+# It used to erase the whole panel on every telemetry pass, which at 5 Hz is a
+# flicker you cannot hold still enough to use.
+tap(buttons.BUTTON_ENTER)                 # back in
+check("the menu is open", app.in_menu, "not in the menu")
+d.reset()
+for _ in range(10):
+    runner.step()
+check("an untouched menu draws nothing (%d calls)" % len(d.calls),
+      len(d.calls) == 0, "%d calls over 10 passes" % len(d.calls))
+
+d.reset()
+tap(RIGHT)
+moved = len(d.calls)
+erases = sum(1 for c in d.calls if c[0] == "erase")
+check("moving the cursor repaints two rows, not the panel (%d calls)" % moved,
+      0 < moved < 20 and erases == 0, "%d calls, %d erases" % (moved, erases))
+
+before = len(chosen)
+d.reset()
+tap(buttons.BUTTON_ENTER)
+check("a value changes on the row under the cursor",
+      len(chosen) == before or app.in_menu)
+
+# Leaving the menu is a three second hold, and that is when settings persist.
+saved.clear()
+writes[0] = 0
+before_cycles = len(chosen)
+tap(LEFT)                                 # back onto the Theme row
+for _ in range(4):                        # cycle the theme a few times
+    tap(buttons.BUTTON_ENTER)
+check("cycling the theme applies live (%d changes)"
+      % (len(chosen) - before_cycles), len(chosen) > before_cycles)
+check("and writes nothing while you cycle", writes[0] == 0,
+      "%d writes before leaving" % writes[0])
+app.press("hold")
+runner.step()
+check("holding leaves the menu", not app.in_menu, "still in the menu")
+check("and that is when the settings are written (%s)" % sorted(saved),
+      "theme" in saved and "theme_light" in saved, repr(saved))
+check("four theme changes cost one write, not four", writes[0] == 1,
+      "%d writes" % writes[0])
 
 print()
 print("== what happens when the ESC stops answering")

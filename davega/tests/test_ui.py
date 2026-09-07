@@ -32,8 +32,16 @@ SCREENS = (("riding", Riding), ("range", RangeScreen),
 # theme, so a check that only ever looks at Nazare is checking a tenth of what
 # ships. Every layout gets the same overlap, grid and footer checks.
 LAYOUT_THEMES = tuple(sorted(THEMES))
-EVERY = (tuple(("riding/%s" % k, Riding, k) for k in LAYOUT_THEMES)
-         + tuple((n, c, "nazare") for n, c in SCREENS[1:]))
+
+#: Every screen in every theme, day and night. The riding screen is nine
+#: arrangements rather than one, and the other four are shared - but all of
+#: them take their colours from the theme, so a check that only ever looks at
+#: Nazare at night is checking a twentieth of what ships.
+EVERY = tuple(("%s/%s%s" % (n, k, "" if dark else "@light"), c,
+               k if dark else k + "@light")
+              for k in LAYOUT_THEMES
+              for n, c in SCREENS
+              for dark in (True, False))
 
 # Device-measured constants (see harness/display.py). A settled frame has to
 # stay usable against 5 Hz telemetry; a full repaint is allowed to be slow
@@ -396,6 +404,33 @@ def main():
           not long_values, ", ".join(long_values[:4]))
 
     print()
+    print("== no value can outgrow the box that was drawn for it")
+    # A region's width is fixed when the layout is built, from the widest
+    # value the designer expected. One digit more does not wrap or clip - it
+    # draws off the side of the panel. Ranges and efficiencies are the ones
+    # that bite: both are estimates, and both can be large early in a ride
+    # before there is enough evidence to be sensible.
+    #
+    # Rather than reason abouteach region's width, render it and let the
+    # display's own bounds check answer.
+    silly = dict(b.nominal())
+    silly.update({"s_range_km": 1480.0, "s_wh_per_km": 940.0,
+                  "s_trip_km": 9999.0, "l_trip_km": 99999.0,
+                  "s_max_kph": 999.0, "avg_motor_current": 1234.0,
+                  "avg_input_current": 999.0, "input_voltage": 100.0,
+                  "temp_fet_filtered": 199.0, "temp_motor_filtered": 199.0,
+                  "s_wh_spent": 99999.0, "l_wh_spent": 99999.0})
+    over = []
+    for name, cls, theme in EVERY:
+        try:
+            cls(theme, names, 0).render(Display(), silly, b, full=True)
+        except OutOfBounds as e:
+            over.append("%s: %s" % (name, e))
+        except Exception as e:                       # noqa: BLE001
+            over.append("%s raised %r" % (name, e))
+    check("absurd values stay inside the panel", not over,
+          "; ".join(over[:3]))
+
     print("== chrome labels stay out of the regions that repaint")
     # A label is furniture: it is drawn once and never again. A region is
     # repainted whenever its value changes, and the panel's font is opaque -

@@ -89,15 +89,18 @@ def main():
     screens = (("riding", Riding), ("range", RangeScreen),
                ("overview", OverviewScreen), ("session", SessionScreen),
                ("lifetime", LifetimeScreen))
+    # From the registry, not a second hand-kept list: a theme added to
+    # themes.py is selectable on the board without touching this file. The
+    # theme in use leads, so the first press off it is a real alternative and
+    # the row opens showing what you are actually looking at.
+    names = [DEFAULT] + sorted(k for k in THEMES if k != DEFAULT)
+    if theme in names:
+        names.remove(theme)
+        names.insert(0, theme)
     menu = Menu([
-        # From the registry, not a second hand-kept list: a theme added to
-        # themes.py is selectable on the board without touching this file.
-        # The default leads, so the first press off it is a real alternative.
-        MenuItem("Theme", [DEFAULT] + sorted(k for k in THEMES
-                                             if k != DEFAULT),
-                 on_select=_save_theme),
-        MenuItem("Display", ["night", "day"], on_select=_save_light),
-    ])
+        MenuItem("Theme", names, on_select=_apply_theme),
+        MenuItem("Display", ["night", "day"], on_select=_apply_light),
+    ], on_close=_remember)
     if light:
         menu.items[1].pos = 1
 
@@ -141,26 +144,46 @@ def main():
         utime.sleep_ms(50)
 
 
-def _save_light(app, value):
-    """Day or night, remembered."""
-    _write_config("theme_light", value == "day")
+def _apply_light(app, value):
+    """Day or night, applied as you cycle it."""
     app.set_light(value == "day")
 
 
-def _save_theme(app, value):
-    """Menu selections outlive the ride."""
-    _write_config("theme", value)
+def _apply_theme(app, value):
+    """Show the theme immediately; remember it on the way out."""
     app.set_theme(value)
 
 
-def _write_config(key, value):
-    """One key, in place. Everything else in the file is the stock app's and
-    must survive untouched."""
+def _remember(app):
+    """Persist what the rider settled on, once, when they leave the menu.
+
+    Writing on every press meant nine writes to flash to reach the tenth
+    theme, each one a blocking erase of a page, for nine settings that were
+    only ever passed through.
+    """
+    _write_config(theme=app.theme, theme_light=app.light)
+
+
+def _write_config(**keys):
+    """Keys, in place, in one read-modify-write.
+
+    Everything else in the file is the stock app's and must survive untouched,
+    so it is read back rather than rebuilt - and written once, because each
+    write is a blocking erase of a flash page.
+    """
+    if not keys:
+        return
     try:
         import ujson
         with open("/data/config.json") as fh:
             cfg = ujson.load(fh)
-        cfg[key] = value
+        changed = False
+        for key, value in keys.items():
+            if cfg.get(key) != value:
+                cfg[key] = value
+                changed = True
+        if not changed:                          # nothing to say, say nothing
+            return
         with open("/data/config.json", "w") as fh:
             ujson.dump(cfg, fh)
     except Exception:                            # noqa: BLE001

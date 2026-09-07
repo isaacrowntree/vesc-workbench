@@ -65,7 +65,10 @@ def _hot_session(f, b, t):
 
 
 def _hot(f, b, t):
-    return t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
+    # A frame is a dict, not an object. Attribute access here raised only when
+    # the FET reading crossed into the warning band, which is the one moment
+    # the screen has something urgent to say.
+    return t.temp_color(f["temp_fet_filtered"], b.temp_derate_start)
 
 
 class Panel(RegionScreen):
@@ -85,6 +88,29 @@ class Panel(RegionScreen):
                 if label:
                     self.label(d, x, y, label)
 
+    @staticmethod
+    def _fit(fn):
+        """Keep a value inside the column it was given.
+
+        Every cell is `MAX_CHARS` wide because that is what fits at this size.
+        A longer value does not clip, it draws past the edge of the panel - so
+        the decimals go first, and then the number itself is clamped. A trip
+        of 9999 km reading 9999 is wrong in a way nobody will ever see; a trip
+        of 9999 km painting over the bezel is a crash.
+        """
+        def value(f, b):
+            v = str(fn(f, b))
+            if len(v) <= MAX_CHARS:
+                return v
+            if "." in v:
+                v = v.split(".", 1)[0]
+                if len(v) <= MAX_CHARS:
+                    return v
+            neg = v.startswith("-")
+            digits = MAX_CHARS - 1 if neg else MAX_CHARS
+            return ("-" if neg else "") + "9" * digits
+        return value
+
     def _val(self, key, x, y, fn, colour=None):
         def paint(d, f, b, v):
             col = colour(f, b, self.t) if colour else self.t.ink
@@ -95,7 +121,7 @@ class Panel(RegionScreen):
             widgets.big(d, x, y + 12, self._drawn.get(key), v, VAL_S, col,
                         self.t.ground, force=forced)
         return (key, x, y + 12, bigfont.width("0000", VAL_S),
-                bigfont.char_h(VAL_S), fn, paint)
+                bigfont.char_h(VAL_S), self._fit(fn), paint)
 
     def _build_regions(self):
         out = list(self.status_regions())
