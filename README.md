@@ -133,12 +133,49 @@ against upstream on every CI run:
 So the display is not failing to parse anything. It is refusing to talk, on two
 bytes. The shim proxies every command to the firmware's own decoder via
 `cmds-proc` and rewrites only those two, recomputing the CRC — 27 lines of Lisp
-for the rewrite itself, 100 for the whole shim including the UART reader and
+for the rewrite itself, 178 for the whole shim including the UART reader and
 its debug counters.
 
 See [docs/davega-shim.md](docs/davega-shim.md). For the display itself — its
 hardware, its `/config.json` settings, and what is still downloadable from the
 vendor — see [docs/davega-x.md](docs/davega-x.md).
+
+## Ten dashboards for the DAVEGA X
+
+The shim keeps the stock display working. If you would rather replace it, the
+DAVEGA X is an ESP32 running MicroPython that runs a user `start.py` *before*
+its own app — so a new dashboard is one file, and holding UP at boot puts the
+stock one back.
+
+![Ten dashboards for the DAVEGA X, one per theme, at true 240x320 device size](docs/img/riding-all.png)
+
+Ten themes, each with **its own layout** rather than its own palette: an
+analogue tachometer, hexagonal shards, hairline arcs, one enormous numeral,
+concentric rings, a shift-light rail, a power-flow meter. Pick one from the
+display's own menu, or:
+
+```sh
+make davega-install              # push the dashboard, as precompiled bytecode
+make davega-theme THEME=nazare   # choose a layout
+make davega-display MODE=day     # or night
+```
+
+Those pictures are not mockups. They are the real screen code run through a
+host-side stand-in for the panel, saved as the pixels it produced — which is
+also how the tests work:
+
+```sh
+make gui-test      # 390 checks, no hardware
+make mockups       # every screen x every theme x day/night, to HTML
+```
+
+The panel has `fill_rectangle`, `pixel` and `writeblock` and no line, circle or
+polygon, and on the device a draw call costs **2.9 ms whatever its size**. So an
+arc drawn a rectangle per column costs 481 ms — four times the budget for a
+whole frame — and the curves are instead composed into a buffer and pushed in
+one transfer at 12 ms a band. See [davega-gui/README.md](davega-gui/README.md)
+for the design, and [docs/theme-layouts.md](docs/theme-layouts.md) for what the
+hardware will and will not do.
 
 ## Requirements
 
