@@ -72,13 +72,14 @@ help:
 	@echo "  make test          - all host-side tests"
 	@echo "  make test-py       - shim reference + payload layout tests"
 	@echo "  make gui-test      - DAVEGA screen tests: golden images, budget, sweeps"
+	@echo "  make test-device   - the dashboard end to end in real MicroPython (docker)"
 	@echo "  make test-lisp     - run the LispBM logic in the upstream REPL (Docker)"
 	@echo ""
 	@echo "Vars: HOST=$(HOST) PORT=$(PORT) CANID=$(CANID) SECS=$(SECS)"
 	@echo "      PROFILE=$(PROFILE)   (e.g. vesc/profiles/nazare-unity.mk)"
 
 # ---- offline tests ---------------------------------------------------------
-test: test-py gui-test test-lisp
+test: test-py gui-test test-lisp test-device
 
 test-py:
 	@cd lisp/model && python3 test_shim.py && python3 test_layout.py
@@ -292,6 +293,11 @@ davega-install-src:
 	  --put davega/gui/boot.py:/gui/boot.py \
 	  --put davega/start.py:/start.py
 	@echo "installed as source - restart the display when you want it"
+
+# End to end, in the MicroPython the display actually runs. Same argument as
+# test-lisp: the interpreter is part of what is under test.
+test-device:
+	@./davega/tests/device/run.sh
 
 # Regenerate the screen mockups from the code that draws them.
 mockups:

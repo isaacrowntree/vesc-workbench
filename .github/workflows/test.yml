@@ -26,6 +26,13 @@ jobs:
       - name: Boot path - start.py wiring, persistence, escape hatch
         run: python3 davega/tests/test_boot.py
 
+  device:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: End to end in the MicroPython the display runs
+        run: ./davega/tests/device/run.sh
+
   lisp:
     runs-on: ubuntu-latest
     steps:

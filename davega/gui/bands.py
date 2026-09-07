@@ -88,10 +88,72 @@ class _PyFrame:
                 y0 += sy
 
 
+class _Swapped:
+    """A native framebuf that is handed byte-swapped colours.
+
+    MicroPython stores an RGB565 pixel with a native 16-bit write, so on a
+    little-endian MCU the low byte lands first. The ILI9341 wants the high
+    byte first on the wire, and `writeblock` streams the buffer untouched -
+    so a colour drawn straight into a framebuf comes out of the panel with
+    its bytes reversed. Red draws blue.
+
+    Swapping on the way in puts the bytes in panel order while keeping the C
+    rasteriser, which is the only reason curves are affordable at all. The
+    Python stand-in writes big-endian directly and needs no wrapper, which is
+    exactly why this never showed up off-device.
+    """
+
+    def __init__(self, fb):
+        self.fb = fb
+
+    @staticmethod
+    def _s(c):
+        return ((c & 0xFF) << 8) | (c >> 8)
+
+    def fill(self, c):
+        self.fb.fill(self._s(c))
+
+    def pixel(self, x, y, c):
+        self.fb.pixel(x, y, self._s(c))
+
+    def hline(self, x, y, w, c):
+        self.fb.hline(x, y, w, self._s(c))
+
+    def vline(self, x, y, h, c):
+        self.fb.vline(x, y, h, self._s(c))
+
+    def line(self, x0, y0, x1, y1, c):
+        self.fb.line(x0, y0, x1, y1, self._s(c))
+
+    def rect(self, x, y, w, h, c, f=False):
+        if f:
+            self.fb.fill_rect(x, y, w, h, self._s(c))
+        else:
+            self.fb.rect(x, y, w, h, self._s(c))
+
+    def fill_rect(self, x, y, w, h, c):
+        self.fb.fill_rect(x, y, w, h, self._s(c))
+
+
+def _little_endian():
+    """Ask, rather than assume. Checked once, at import."""
+    try:
+        import framebuf
+    except ImportError:
+        return False
+    probe = bytearray(2)
+    framebuf.FrameBuffer(probe, 1, 1, framebuf.RGB565).pixel(0, 0, 0x1234)
+    return probe[0] == 0x34
+
+
+_SWAP = _little_endian()
+
+
 def _frame(buf, w, h):
     try:
         import framebuf
-        return framebuf.FrameBuffer(buf, w, h, framebuf.RGB565)
+        fb = framebuf.FrameBuffer(buf, w, h, framebuf.RGB565)
+        return _Swapped(fb) if _SWAP else fb
     except ImportError:
         return _PyFrame(buf, w, h)
 

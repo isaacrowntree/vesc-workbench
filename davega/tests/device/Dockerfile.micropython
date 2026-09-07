@@ -1,0 +1,31 @@
+# Builds the MicroPython the DAVEGA actually runs, so our dashboard is tested
+# by the same interpreter that will execute it rather than by CPython.
+#
+# The device reports (1, 14, 0) with mpy version 5. CPython and MicroPython
+# disagree in ways that matter here - what is in the standard library, how much
+# of the language is compiled in, how `const` and `framebuf` behave - and every
+# one of those disagreements is invisible until the board boots.
+#
+# The unix port, not the ESP32 one: we want the interpreter's semantics, and
+# the hardware is faked (see fakes.py). MICROPY_PY_FRAMEBUF is on because
+# bands.py composes curves into a real framebuf on the device and falls back to
+# a Python stand-in everywhere else - this is how the stand-in gets checked
+# against the real thing.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential git ca-certificates pkg-config libffi-dev python3 \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v1.14 \
+      https://github.com/micropython/micropython.git /src/micropython
+WORKDIR /src/micropython
+RUN make -C mpy-cross -j"$(nproc)"
+WORKDIR /src/micropython/ports/unix
+RUN make submodules >/dev/null 2>&1 || true
+# -Wno-error because this is a 2021 tree built with a 2023 compiler: GCC 12
+# raises warnings MicroPython 1.14 never saw, and -Werror turns them fatal.
+# The interpreter's behaviour is what is under test, not its build hygiene.
+RUN make CFLAGS_EXTRA='-DMICROPY_PY_FRAMEBUF=1 -Wno-error' -j"$(nproc)"
+RUN cp micropython /usr/local/bin/micropython \
+ && cp /src/micropython/mpy-cross/mpy-cross /usr/local/bin/mpy-cross
+WORKDIR /work
+ENTRYPOINT ["micropython"]
