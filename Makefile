@@ -59,6 +59,7 @@ help:
 	@echo "  make lisp-stop     - stop the running LispBM script"
 	@echo ""
 	@echo "DAVEGA X display (its own WiFi AP, not the board):"
+	@echo "  make mockups        - render every screen to an HTML page"
 	@echo "  make webrepl        - fetch the WebREPL client and open it locally"
 	@echo "  make davega-recon   - read-only device recon over WebREPL"
 	@echo "  make davega-settings- print /config.json"
@@ -235,6 +236,11 @@ davega-display:
 davega-gate:
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
 	  -f davega-shim/webrepl/recon.py -e "probe('frozen.run_standard')"
+
+# Regenerate the screen mockups from the code that draws them.
+mockups:
+	@python3 tools/mockup.py
+	@echo "open davega-gui/mockups/screens.html"
 
 webrepl: $(WEBREPL)
 	@echo "1. hold UP+DOWN and power-cycle the board - the DAVEGA has no switch,"

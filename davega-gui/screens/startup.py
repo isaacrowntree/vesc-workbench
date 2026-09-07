@@ -62,6 +62,13 @@ class Splash(RegionScreen):
         self._step += 1
         return self._t
 
+    def on_frame(self, f, b):
+        """Step the sweep once per render, not once per region - three bars
+        asking a value function that advanced the animation moved it three
+        times a frame.
+        """
+        self.advance()
+
     def chrome(self, d):
         d.set_color(self.t.ink, self.t.ground)
         d.set_pos(MARGIN, 40)
@@ -72,13 +79,19 @@ class Splash(RegionScreen):
         for y, h in self.BARS:
             d.fill_rectangle(MARGIN, y, W - 2 * MARGIN, h, self.t.track)
 
-    def _bar_painter(self, y, h, colour):
-        span = W - 2 * MARGIN
+    def _bar_painter(self, key, y, h, colour):
+        """Paint the change, not the bar.
 
+        Clearing the full track and refilling it every frame reads as a black
+        flash on this panel - three bars, fifty frames, and the whole sweep
+        looks broken. Only the difference is ever drawn.
+        """
         def paint(d, f, b, v):
-            d.fill_rectangle(MARGIN, y, span, h, self.t.track)
-            if v:
-                d.fill_rectangle(MARGIN, y, v, h, colour())
+            prev = self._drawn.get(key, 0) or 0
+            if v > prev:
+                d.fill_rectangle(MARGIN + prev, y, v - prev, h, colour())
+            elif v < prev:
+                d.fill_rectangle(MARGIN + v, y, prev - v, h, self.t.track)
         return paint
 
     def _build_regions(self):
@@ -87,10 +100,10 @@ class Splash(RegionScreen):
                    lambda: self.t.ink)
         out = []
         for i, (y, h) in enumerate(self.BARS):
-            out.append(("bar%d" % i, MARGIN, y, span, h,
-                        (lambda idx: lambda f, b: int(span * self.advance()
-                                                      if idx == 0 else span * self._t))(i),
-                        self._bar_painter(y, h, colours[i])))
+            key = "bar%d" % i
+            out.append((key, MARGIN, y, span, h,
+                        (lambda idx: lambda f, b: int(span * self._t))(i),
+                        self._bar_painter(key, y, h, colours[i])))
         return tuple(out)
 
 

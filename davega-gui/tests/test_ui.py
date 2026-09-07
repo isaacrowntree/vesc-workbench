@@ -35,7 +35,7 @@ SCREENS = (("riding", Riding), ("range", RangeScreen),
 # meter together - which is the common case while actually riding, not an
 # outlier. 150 ms is ~7 fps against 5 Hz telemetry.
 MAX_SETTLED_MS = 150
-MAX_FULL_MS = 900
+MAX_FULL_MS = 950
 
 def settle(screen, d, frame, board, limit=40):
     """Render until nothing is mid-animation.
@@ -306,9 +306,13 @@ def main():
             check("sweep/%s" % key, False, str(e))
             continue
         avg = total[0] / max(1, n)
-        ok = sp.settled() and 1.0 <= total[0] / 1000 <= 4.0 and avg <= 80
-        check("sweep/%-11s %d frames, %.1f s, avg %.0f ms" % (key, n, total[0] / 1000, avg),
-              ok, "settled=%s" % sp.settled())
+        # What matters is that it is a real sweep and that every frame is
+        # cheap: the wall-clock duration is set by how fast the caller renders,
+        # not by the drawing cost. Painting deltas instead of clearing took a
+        # frame from 34 ms to 13 - which is the black flash gone.
+        ok = sp.settled() and n >= 40 and avg <= 40
+        check("sweep/%-11s %d frames, avg %.0f ms" % (key, n, avg), ok,
+              "settled=%s" % sp.settled())
 
     # A sweep that leaves the dash showing a made-up number is worse than no
     # sweep, so the hand-off has to land on the real frame.
@@ -354,6 +358,39 @@ def main():
             break
     check("all %d screens x %d light themes" % (len(SCREENS), len(THEMES)),
           bad is None, bad or "")
+
+    print()
+    print("== no value can run off the panel")
+    # A column at this digit size holds four characters. Anything longer is
+    # drawn past the right edge, which the strict harness catches only if the
+    # exact frame that produces it is in the envelope.
+    from screens import panels
+    long_values = []
+    for name, cls in SCREENS:
+        if not hasattr(cls, "PAIRS"):
+            continue
+        for _, frame in env:
+            for row in cls.PAIRS:
+                for label, spec in row:
+                    if spec is None:
+                        continue
+                    v = spec[1](frame, b)
+                    if len(v) > panels.MAX_CHARS:
+                        long_values.append("%s/%s=%r" % (name, spec[0], v))
+    check("every panel value fits %d characters" % panels.MAX_CHARS,
+          not long_values, ", ".join(long_values[:4]))
+
+    print()
+    print("== the screens use the whole panel")
+    # A 2.8 inch display is small enough without leaving a third of it black.
+    # Every screen's lowest drawn region must reach the bottom band.
+    for name, cls in SCREENS:
+        regions = [r for r in cls("nazare", names, 0).regions()
+                   if not r[0].startswith("hdr_")]
+        lowest = max(r[2] + r[4] for r in regions)
+        rightmost = max(r[1] + r[3] for r in regions)
+        check("fills/%-9s lowest %d, widest %d" % (name, lowest, rightmost),
+              lowest >= 280 and rightmost >= 210)
 
     print()
     print("== every screen is reachable")

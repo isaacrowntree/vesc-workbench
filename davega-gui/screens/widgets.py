@@ -65,3 +65,42 @@ def text(d, x, y, old, new, scale=1, color=0xFFFF, bg=0x0000, force=False):
             d.set_pos(cx, y)
             d.print(c, scale=scale, numeric=numeric)
     return new
+
+
+def big(d, x, y, old, new, scale, colour, bg, force=False):
+    """Large digits, repainting only the characters that changed.
+
+    Same idea as `text`, but through `bigfont` - which draws glyphs as filled
+    rectangles and so has no size ceiling. A digit costs about six draw calls
+    whatever the scale, so redrawing one is cheap and redrawing the field is
+    not free.
+    """
+    from . import bigfont
+    ch = bigfont.char_h(scale)
+
+    def offsets(text):
+        """Where each character starts. Not a fixed pitch: a colon is narrower
+        than a digit, so "0:42" and "1:03" line up but "12.4" and "0:42" do
+        not - and diffing across that leaves glyphs at the old spacing."""
+        out, cx = [], 0
+        for c in text:
+            out.append(cx)
+            cx += bigfont.width(c, scale)
+        return out, cx
+
+    new_off, new_w = offsets(new)
+    old_off, old_w = offsets(old) if old is not None else (None, 0)
+
+    if force or old is None or old_off != new_off:
+        if old is not None:
+            d.fill_rectangle(x, y, max(old_w, new_w), ch, bg)
+        bigfont.draw(d, x, y, new, scale, colour)
+        return new
+
+    for i, (a, c) in enumerate(zip(old, new)):
+        if a == c:
+            continue
+        cx = x + new_off[i]
+        d.fill_rectangle(cx, y, bigfont.width(c, scale), ch, bg)
+        bigfont.draw(d, cx, y, c, scale, colour)
+    return new

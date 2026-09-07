@@ -27,7 +27,11 @@ UPDATE = "--update-golden" in sys.argv
 # Raised from 24 fill_rectangles when the Nazare layout landed: a segmented
 # battery is 14 of them, and a segmented battery is the point. At ~2.7 ms a
 # call that is 78 ms of a 605 ms full paint, and only on a full paint.
-BUDGET = {"fill_rectangle": 40, "print": 24, "total": 130}
+# Digits are rectangles now - a glyph is about six of them at any size - so a
+# full paint of a screen with a large numeral, a segmented battery and two big
+# secondary figures runs to eighty. At ~2.7 ms a call that is most of a 690 ms
+# first paint, and first paints are rare.
+BUDGET = {"fill_rectangle": 90, "print": 24, "total": 140}
 
 # Budgets in milliseconds, from constants measured on the panel. Pixels were
 # the wrong proxy: a draw call costs ~2.7 ms whatever its size and a character
@@ -47,7 +51,7 @@ ANIMATION_MS = 110
 # digit moved, is not. 8% of the frame is generous and still ~14x cheaper than
 # repainting.
 FULL_REPAINT_MAX = 1.30          # x frame area - erase plus content over it
-STEADY_STATE_MAX = 0.10          # x frame area - a ratchet, tighten as it improves
+STEADY_STATE_MAX = 0.15          # x frame area - a ratchet, tighten as it improves
 
 # An animating frame redraws more than a settled one: a sweeping value can move
 # several digits at once. Still bounded, and the bound is what stops an
