@@ -23,6 +23,8 @@ jobs:
         run: python3 davega-gui/tests/test_runner.py
       - name: Session accumulation - trip, lifetime, the fields they left TODO
         run: python3 davega-gui/tests/test_session.py
+      - name: Boot path - start.py wiring, persistence, escape hatch
+        run: python3 davega-gui/tests/test_boot.py
 
   lisp:
     runs-on: ubuntu-latest
