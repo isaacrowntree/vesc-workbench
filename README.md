@@ -201,7 +201,9 @@ davega/    code that runs ON the display (and the tools that build it)
 
 `docs/` is the writing: [findings](docs/findings.md),
 [connecting](docs/connecting.md), [the display](docs/davega-x.md),
-[what the panel will draw](docs/theme-layouts.md).
+[what the panel will draw](docs/theme-layouts.md), and
+[this board](docs/board-provenance.md) — where every default here came from,
+and which of them are measured rather than inherited.
 
 ## Requirements
 
