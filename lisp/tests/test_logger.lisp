@@ -89,6 +89,53 @@
 (chk  "tc"     tc-events 0)
 (chk  "samples" samples 0)
 
+(print "== a long ride does not grow the heap")
+; This runs on the motor controller of a board somebody rides, for hours, and
+; the failure it must not have is the one that only shows up late: a recorder
+; that creeps until LispBM runs out and stops - or worse, thrashes the
+; collector while the rider is on it. So the whole ride is played through at
+; three lengths and the heap compared, rather than reasoned about.
+;
+; It also pins the derived uptime. Accumulating 0.2 in a float drifts: this
+; ride used to report 5000.18 seconds where it had run exactly 5000.
+(log-reset)
+(gc)
+(def free0 (mem-longest-free))
+
+(defun soak (n) {
+    (var i 0)
+    (loopwhile (< i n) {
+        ; deliberately restless - every high-water branch taken, every float
+        ; re-boxed. The quiet case would prove nothing.
+        (setq S-current (+ 10.0 (mod i 70)))
+        (setq S-current-in (+ 5.0 (mod i 25)))
+        (setq S-temp-fet (+ 20.0 (mod i 60)))
+        (setq S-temp-mot (+ 20.0 (mod i 60)))
+        (setq S-vin (- 50.0 (/ (to-float (mod i 100)) 10.0)))
+        (setq S-rpm (* 100.0 (mod i 300)))
+        (setq S-duty (/ (to-float (mod i 90)) 100.0))
+        (setq S-can-rpm (* 100.0 (mod i 290)))
+        (setq S-fault 0)
+        (log-tick)
+        (setq i (+ i 1))
+    })
+})
+
+(soak 500)
+(gc)
+(def free1 (mem-longest-free))
+(soak 24500)
+(gc)
+(def free2 (mem-longest-free))
+
+(chk "500 ticks and 25,000 ticks leave the same heap" free1 free2)
+(chk "and it is no worse than before the ride"
+     (if (>= free2 free0) 1 0) 1)
+(chk "25,000 ticks is 25,000 samples" samples 25000)
+(chkf "uptime is exact, not accumulated" uptime 5000.0)
+
+(log-reset)
+
 ; summary MUST be last
 (if (= fails 0)
     (print "all lisp tests passed")

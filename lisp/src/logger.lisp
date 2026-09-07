@@ -7,8 +7,16 @@
 ; lispGetStats, so nothing has to print and nothing has to survive a reboot to
 ; be useful. Pull it with `make log-pull` before powering down.
 ;
-; Costs one pass over a handful of getters per tick. No allocation in the loop:
-; every slot is a global, updated in place.
+; Costs one pass over a handful of getters per tick, and it does not grow.
+; Every slot is a global scalar updated in place - no lists, no buffers,
+; nothing appended. LispBM boxes floats, so a tick does allocate and then
+; drop a handful of them, but that is churn the collector handles: measured
+; in the real interpreter, the heap is identical after 500 ticks and after
+; 25,000 (`lisp/tests/test_logger.lisp`).
+;
+; It only ever *reads* the ESC. There is no set-current, no config write, and
+; deliberately no uart-start - that call permanently flashes
+; app_to_use = APP_NONE and takes the throttle with it.
 
 (def log-rate 0.2)          ; seconds between samples
 
@@ -37,7 +45,7 @@
 (def tc-max-diff 6000.0)    ; mirrors app_ppm_conf.tc_max_diff
 
 (def samples 0)
-(def uptime 0.0)
+(def uptime 0.0)          ; seconds, derived from samples - see log-tick
 
 (defun hiwater () {
     (var im (get-current))
@@ -105,5 +113,8 @@
     (catch-fault)
     (tc-watch)
     (setq samples (+ samples 1))
-    (setq uptime (+ uptime log-rate))
+    ; Derived, not accumulated. Adding 0.2 to a float thirty thousand times
+    ; drifts: 25,000 ticks came out as 5000.18 s instead of 5000.0, and it
+    ; gets worse the longer the ride. Multiplying an exact integer does not.
+    (setq uptime (* samples log-rate))
 })
