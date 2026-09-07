@@ -12,8 +12,8 @@ Reframed as a general VESC workbench; the DAVEGA shim is the worked example.
   calibration, bench mode (`motors-off`/`motors-on`), reboot and lisp-erase
 - Test suite: Python reference plus the shipped Lisp run in the upstream LispBM
   REPL, asserting framed bytes against DAVEga's own parser offsets
-- Board profiles (`profiles/`) and CI
-- Integration harness (`tests/lisp/harness.lisp`): a fake UART with a scriptable
+- Board profiles (`vesc/profiles/`) and CI
+- Integration harness (`lisp/tests/harness.lisp`): a fake UART with a scriptable
   per-call byte budget, driving the real reader
 - `make upload-lisp` moves `app_to_use` off UART-combined apps before running a
   script that calls `uart-start`, instead of letting the firmware zero it

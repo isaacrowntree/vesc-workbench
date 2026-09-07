@@ -1,17 +1,19 @@
 # build artefacts
 build/
 
-# your own board data - never publish these
-backups/
-configs/
-configs-7.00/
-screenshots/
-firmware/
+# your own board data - never publish these. Anchored at the root: davega/
+# firmware/ holds the shim sketch and must ship, and an unanchored pattern
+# swallowed it.
+/backups/
+/configs/
+/configs-7.00/
+/screenshots/
+/firmware/
 
 # junk
 .DS_Store
 __pycache__/
 *.pyc
 *.rcc
-profiles/local.mk
+vesc/profiles/local.mk
 configs-to-load/

@@ -12,7 +12,7 @@ official or community fix.
 
 ## Why it is fixable
 
-`tests/protocol-diff.sh` diffs bldc `6.00` against `master`. The
+`lisp/tests/protocol-diff.sh` diffs bldc `6.00` against `master`. The
 `COMM_GET_VALUES` payload is byte-identical (25 fields, same types and order)
 and the fields DAVEga reads sit at identical offsets.
 
@@ -21,7 +21,7 @@ The `COMM_FW_VERSION` **response is not structurally identical**: 7.x appends a
 have (added upstream in `38f44a7227`). It does not break the shim - DAVEga reads
 major/minor at fixed offsets 1-2 and the length byte covers the extra bytes - but
 the earlier claim of an identical structure was wrong, and
-`tests/protocol-diff.sh` missed it because its grep only matched
+`lisp/tests/protocol-diff.sh` missed it because its grep only matched
 `send_buffer[ind++]`, `memcpy` and `strcpy`, not `buffer_append_*`.
 
 The display parses fine. It refuses to talk, on two bytes.

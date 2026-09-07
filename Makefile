@@ -6,7 +6,7 @@
 #
 #   make help
 
-# Load a board profile if one is given: make davega-debug PROFILE=profiles/nazare-unity.mk
+# Load a board profile if one is given: make davega-debug PROFILE=vesc/profiles/nazare-unity.mk
 PROFILE ?=
 ifneq ($(PROFILE),)
 include $(PROFILE)
@@ -26,7 +26,7 @@ VESCPROC ?= vesc_tool
 endif
 CONFDIR ?= $(ROOT)/configs
 OUTDIR  ?= $(ROOT)/backups/qml-pull
-LISP    ?= davega-shim/lisp/davega_shim.lisp
+LISP    ?= lisp/src/davega_shim.lisp
 TIMEOUT ?= 120
 SECS    ?= 15
 
@@ -75,27 +75,27 @@ help:
 	@echo "  make test-lisp     - run the LispBM logic in the upstream REPL (Docker)"
 	@echo ""
 	@echo "Vars: HOST=$(HOST) PORT=$(PORT) CANID=$(CANID) SECS=$(SECS)"
-	@echo "      PROFILE=$(PROFILE)   (e.g. profiles/nazare-unity.mk)"
+	@echo "      PROFILE=$(PROFILE)   (e.g. vesc/profiles/nazare-unity.mk)"
 
 # ---- offline tests ---------------------------------------------------------
 test: test-py gui-test test-lisp
 
 test-py:
-	@cd davega-shim && python3 test_shim.py && python3 test_layout.py
+	@cd lisp/model && python3 test_shim.py && python3 test_layout.py
 
 # Every suite runs even when an earlier one fails. Stopping at the first
 # failure hid a real layout bug behind an unrelated one for an entire session.
 gui-test:
 	@fail=0; for t in screens themes ui vesc input runner session boot; do \
-	  python3 davega-gui/tests/test_$$t.py || fail=1; \
+	  python3 davega/tests/test_$$t.py || fail=1; \
 	done; \
 	if [ $$fail -ne 0 ]; then echo "SOME GUI SUITES FAILED"; exit 1; fi
 
 gui-golden:
-	@python3 davega-gui/tests/test_screens.py --update-golden
+	@python3 davega/tests/test_screens.py --update-golden
 
 test-lisp:
-	@./tests/run-lisp-tests.sh
+	@./lisp/tests/run-lisp-tests.sh
 
 # ---- board ------------------------------------------------------------------
 check:
@@ -114,7 +114,7 @@ define render
 	@mkdir -p $(BUILD)
 	@sed -e 's|@@HOST@@|$(HOST)|g' -e 's|@@PORT@@|$(PORT)|g' \
 	     -e 's|@@CANID@@|$(CANID)|g' -e 's|@@SECS@@|$(SECS)|g' -e 's|@@CONFDIR@@|$(CONFDIR)|g' -e 's|@@OUTDIR@@|$(OUTDIR)|g' -e 's|@@LISP@@|$(ROOT)/$(LISP)|g' \
-	     tools/$(1).qml > $(BUILD)/$(1).qml
+	     vesc/qml/$(1).qml > $(BUILD)/$(1).qml
 endef
 
 # run a rendered template, filtering the noise Qt prints on teardown
@@ -145,13 +145,13 @@ apply: check
 
 # The proxy variants differ only in their output policy, so they are assembled
 # from the shared core rather than kept as two near-identical copies.
-build/davega_logger.lisp: davega-shim/lisp/logger.lisp davega-shim/lisp/logger-main.lisp
+build/davega_logger.lisp: lisp/src/logger.lisp lisp/src/logger-main.lisp
 	@mkdir -p $(BUILD)
 	@cat $^ > $@
 
-build/logger.min.lisp: build/davega_logger.lisp tools/minify-lisp.py
+build/logger.min.lisp: build/davega_logger.lisp lisp/minify.py
 	@mkdir -p $(BUILD)
-	@python3 tools/minify-lisp.py $< $@ $(CANID)
+	@python3 lisp/minify.py $< $@ $(CANID)
 
 # Flight recorder. Replaces the DAVEGA proxy - one LispBM script at a time.
 logger: check build/logger.min.lisp
@@ -161,17 +161,17 @@ logger: check build/logger.min.lisp
 log-pull: check
 	$(call run_qml,log-pull)
 
-build/davega_proxy_%.lisp: davega-shim/lisp/proxy.lisp davega-shim/lisp/reader.lisp davega-shim/lisp/proxy-main.lisp davega-shim/lisp/output-%.lisp
+build/davega_proxy_%.lisp: lisp/src/proxy.lisp lisp/src/reader.lisp lisp/src/proxy-main.lisp lisp/src/output-%.lisp
 	@mkdir -p $(BUILD)
 	@cat $^ > $@
 
-build/proxy_%.min.lisp: build/davega_proxy_%.lisp tools/minify-lisp.py
+build/proxy_%.min.lisp: build/davega_proxy_%.lisp lisp/minify.py
 	@mkdir -p $(BUILD)
-	@python3 tools/minify-lisp.py $< $@ $(CANID)
+	@python3 lisp/minify.py $< $@ $(CANID)
 
-build/davega_shim.min.lisp: davega-shim/lisp/davega_shim.lisp tools/minify-lisp.py
+build/davega_shim.min.lisp: lisp/src/davega_shim.lisp lisp/minify.py
 	@mkdir -p $(BUILD)
-	@python3 tools/minify-lisp.py $< $@ $(CANID)
+	@python3 lisp/minify.py $< $@ $(CANID)
 
 motors-off: check build/proxy_safe.min.lisp
 	@echo "uploading proxy with motor output DISABLED (bench mode)"
@@ -214,28 +214,28 @@ WEBREPL_PASSWORD ?= agevad
 export WEBREPL_PASSWORD
 
 davega-recon:
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
-	  -f davega-shim/webrepl/recon.py -e "recon()"
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega/tools/recon.py -e "recon()"
 
 davega-settings:
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
-	  -f davega-shim/webrepl/settings.py -e "show()"
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega/tools/settings.py -e "show()"
 
-# Select a davega-gui theme. Names come from davega-gui/screens/themes.py.
+# Select a davega theme. Names come from davega/gui/themes.py.
 davega-theme:
 	@test -n "$(THEME)" || { echo "usage: make davega-theme THEME=nazare"; exit 1; }
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
-	  -f davega-shim/webrepl/settings.py -e "set_theme('$(THEME)')"
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega/tools/settings.py -e "set_theme('$(THEME)')"
 
 # Day or night, for whichever theme is selected.
 davega-display:
 	@test -n "$(MODE)" || { echo "usage: make davega-display MODE=day|night"; exit 1; }
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
-	  -f davega-shim/webrepl/settings.py -e "set_display('$(MODE)')"
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega/tools/settings.py -e "set_display('$(MODE)')"
 
 davega-gate:
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
-	  -f davega-shim/webrepl/recon.py -e "probe('frozen.run_standard')"
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) \
+	  -f davega/tools/recon.py -e "probe('frozen.run_standard')"
 
 # Push the dashboard to the display, as bytecode.
 #
@@ -249,8 +249,8 @@ davega-gate:
 MPY_VERSION ?= 1.12
 MPY_VENV := build/mpy-venv
 MPY_CROSS := $(MPY_VENV)/bin/mpy-cross-bin
-MODULES ?= $(basename $(notdir $(wildcard davega-gui/screens/*.py)))
-LAYOUTS ?= $(basename $(notdir $(wildcard davega-gui/screens/layouts/*.py)))
+MODULES ?= $(basename $(notdir $(wildcard davega/gui/*.py)))
+LAYOUTS ?= $(basename $(notdir $(wildcard davega/gui/layouts/*.py)))
 
 $(MPY_CROSS):
 	@echo "fetching mpy-cross $(MPY_VERSION) (emits the mpy v5 the display loads)"
@@ -263,40 +263,40 @@ $(MPY_CROSS):
 # is not one.
 mpy: $(MPY_CROSS)
 	@rm -rf build/mpy && mkdir -p build/mpy/layouts
-	@for f in davega-gui/screens/*.py davega-gui/runner.py davega-gui/boot.py; do \
+	@for f in davega/gui/*.py davega/gui/runner.py davega/gui/boot.py; do \
 	  $(MPY_CROSS) -o build/mpy/`basename $$f .py`.mpy $$f || exit 1; done
-	@for f in davega-gui/screens/layouts/*.py; do \
+	@for f in davega/gui/layouts/*.py; do \
 	  $(MPY_CROSS) -o build/mpy/layouts/`basename $$f .py`.mpy $$f || exit 1; done
 	@echo "compiled `ls build/mpy/*.mpy build/mpy/layouts/*.mpy | wc -l | tr -d ' '` modules" \
-	  "(`cat davega-gui/screens/*.py davega-gui/screens/layouts/*.py | wc -c | tr -d ' '` B source" \
+	  "(`cat davega/gui/*.py davega/gui/layouts/*.py | wc -c | tr -d ' '` B source" \
 	  "-> `cat build/mpy/*.mpy build/mpy/layouts/*.mpy | wc -c | tr -d ' '` B bytecode)"
 
 davega-install: mpy
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) --mkdir /gui \
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) --mkdir /gui \
 	  --mkdir /gui/layouts \
 	  $(foreach m,$(MODULES),--put build/mpy/$(m).mpy:/gui/$(m).mpy) \
 	  $(foreach l,$(LAYOUTS),--put build/mpy/layouts/$(l).mpy:/gui/layouts/$(l).mpy) \
 	  --put build/mpy/runner.mpy:/gui/runner.mpy \
 	  --put build/mpy/boot.mpy:/gui/boot.mpy \
-	  --put davega-gui/start.py:/start.py
+	  --put davega/start.py:/start.py
 	@echo "installed - restart the display when you want it"
 
 # Source instead of bytecode, for when you want to read a traceback with real
 # line numbers on the device.
 davega-install-src:
-	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) --mkdir /gui \
+	@python3 davega/tools/webrepl-run.py --host $(DAVEGA_HOST) --mkdir /gui \
 	  --mkdir /gui/layouts \
-	  $(foreach m,$(MODULES),--put davega-gui/screens/$(m).py:/gui/$(m).py) \
-	  $(foreach l,$(LAYOUTS),--put davega-gui/screens/layouts/$(l).py:/gui/layouts/$(l).py) \
-	  --put davega-gui/runner.py:/gui/runner.py \
-	  --put davega-gui/boot.py:/gui/boot.py \
-	  --put davega-gui/start.py:/start.py
+	  $(foreach m,$(MODULES),--put davega/gui/$(m).py:/gui/$(m).py) \
+	  $(foreach l,$(LAYOUTS),--put davega/gui/layouts/$(l).py:/gui/layouts/$(l).py) \
+	  --put davega/gui/runner.py:/gui/runner.py \
+	  --put davega/gui/boot.py:/gui/boot.py \
+	  --put davega/start.py:/start.py
 	@echo "installed as source - restart the display when you want it"
 
 # Regenerate the screen mockups from the code that draws them.
 mockups:
-	@python3 tools/mockup.py
-	@echo "open davega-gui/mockups/index.html"
+	@python3 davega/tools/mockup.py
+	@echo "open davega/mockups/index.html"
 
 webrepl: $(WEBREPL)
 	@echo "1. hold UP+DOWN and power-cycle the board - the DAVEGA has no switch,"
@@ -305,7 +305,7 @@ webrepl: $(WEBREPL)
 	@echo "3. join that davega-x-... network (this machine loses the board bridge)"
 	@echo "4. connect to ws://192.168.4.1:8266 in the page that just opened"
 	@echo ""
-	@echo "then paste davega-shim/webrepl/recon.py and call recon()"
+	@echo "then paste davega/tools/recon.py and call recon()"
 ifeq ($(UNAME),Darwin)
 	@open $(WEBREPL)
 else
@@ -339,7 +339,7 @@ upload-lisp: check
 	$(call run_qml,lisp-upload)
 
 upload-hello: check
-	@$(MAKE) --no-print-directory upload-lisp LISP=tools/hello.lisp
+	@$(MAKE) --no-print-directory upload-lisp LISP=lisp/src/hello.lisp
 
 lisp-stats: check
 	$(call run_qml,lisp-probe)

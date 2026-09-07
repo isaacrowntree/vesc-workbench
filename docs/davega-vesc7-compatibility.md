@@ -8,7 +8,7 @@ protocol did not change. Only the reported version number did.**
 
 ## Evidence
 
-Reproduce with `./tests/protocol-diff.sh` (diffs bldc tag `6.00`, the last version
+Reproduce with `./lisp/tests/protocol-diff.sh` (diffs bldc tag `6.00`, the last version
 DAVEGA supports, against `master` = 7.x).
 
 | Surface | 6.00 | 7.x | Same? |

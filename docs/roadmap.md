@@ -21,7 +21,7 @@ What we do not know is whether the call site resolves those names through the
 module at call time or holds its own reference. Rebinding works in the first
 case and is a no-op in the second.
 
-**Test:** upload `davega-shim/webrepl/start.py`, reboot with the ESC on
+**Test:** upload `davega/tools/start.py`, reboot with the ESC on
 firmware 7, see whether the display talks. Half an hour, fully reversible.
 
 If it works, the proxy shim becomes optional and thread 2 opens up. If it does
@@ -192,7 +192,7 @@ davega/      the display - the shim, the WebREPL tooling, the firmware
 lisp/        the LispBM development workflow - upload, test in the real
              interpreter, bench, minify.
 docs/        findings, known issues, roadmap
-profiles/    board profiles
+vesc/profiles/    board profiles
 ```
 
 ### The README's job is routing

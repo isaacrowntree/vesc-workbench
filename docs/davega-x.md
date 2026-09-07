@@ -11,7 +11,7 @@ and what you can do to it directly.
 > [!WARNING]
 > **Everything on this page was derived from the published firmware images and
 > the vendor's own installer — not from a running device.** The two scripts in
-> `davega-shim/webrepl/` have never been executed on a DAVEGA. They are written
+> `davega/tools/` have never been executed on a DAVEGA. They are written
 > against what the firmware images say, and your device is the authority. Run
 > `recon()` first, `backup()` before any write, and expect to correct this page.
 
@@ -95,7 +95,7 @@ filesystem**, alongside its odometers:
 /odometer2.json
 ```
 
-Which means settings can be scripted. `davega-shim/webrepl/settings.py` does
+Which means settings can be scripted. `davega/tools/settings.py` does
 this over WebREPL: `show()` prints the config, `backup()` copies it aside,
 `update(wheel_diameter_mm=200)` writes named keys back, and it refuses keys the
 firmware does not already have so a typo cannot create a dead setting.
@@ -141,7 +141,7 @@ DAVEGA does not only read from the ESC — it can write motor configuration to i
 ## What we do not know, and how to find out
 
 Rather than guess at the MCU, the flash size or where the version gate lives,
-ask the device. `davega-shim/webrepl/recon.py` is a read-only recon script:
+ask the device. `davega/tools/recon.py` is a read-only recon script:
 paste it into the WebREPL prompt and call `recon()`.
 
 It reports:
@@ -188,7 +188,7 @@ rs.is_compatible_vesc_version = lambda *a, **k: True
 rs.assert_compatible_vesc_version = lambda *a, **k: None
 ```
 
-`davega-shim/webrepl/start.py` is that, with the failure handling. The firmware
+`davega/tools/start.py` is that, with the failure handling. The firmware
 has executed a user `start.py` at boot since v5.03 — that is how
 [sn8ke](https://github.com/janpom/sn8ke) hooks in, and sn8ke falls through to
 the normal app when its button is not held, which is the behaviour this depends

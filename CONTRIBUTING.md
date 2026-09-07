@@ -5,7 +5,7 @@ hardware other than a FOCBOX Unity**, which is the only ESC this has run on.
 
 ## Adding a board profile
 
-Copy `profiles/nazare-unity.mk`, edit it, and open a PR. Include in the header
+Copy `vesc/profiles/nazare-unity.mk`, edit it, and open a PR. Include in the header
 comment: ESC, firmware version, motors, drive ratio, wheel size, battery, remote
 and display.
 
@@ -23,13 +23,13 @@ make test-lisp     # runs the shipped script in the upstream LispBM REPL
 make test          # everything
 ```
 
-`tests/lisp/` runs the **real** script, not a transcription of it, and asserts
+`lisp/tests/` runs the **real** script, not a transcription of it, and asserts
 the framed bytes against offsets taken from DAVEga's own parser. Both the
 readable source and the minified artifact are tested, so golfing cannot silently
 change the wire format.
 
 Upload happens in 384-byte chunks with a 1-second per-chunk timeout, so size
-matters. `tools/minify-lisp.py` strips the script before upload; keep an eye on
+matters. `lisp/minify.py` strips the script before upload; keep an eye on
 the chunk count it prints.
 
 ### LispBM gotchas that have already bitten

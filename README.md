@@ -79,12 +79,12 @@ make lisp-stop / lisp-erase                 # stop or remove
 make test-lisp                              # run it in the real interpreter
 ```
 
-There is an integration harness too: `tests/lisp/test_reader.lisp` drives the
+There is an integration harness too: `lisp/tests/test_reader.lisp` drives the
 real UART reader through a fake serial line that can split a frame header
 across reads, so framing and resync are tested rather than assumed.
 
 Scripts are tested by running them in the **upstream LispBM REPL** (Docker),
-not by transcribing them into another language. `tools/minify-lisp.py` strips
+not by transcribing them into another language. `lisp/minify.py` strips
 them before upload, because upload happens in 384-byte chunks with a 1-second
 per-chunk timeout and size genuinely matters.
 
@@ -121,7 +121,7 @@ A DAVEGA X on VESC 7 refuses to start:
 
 > supported vesc firmware versions 5.x to 6.x - press any button to restart
 
-The telemetry protocol **did not change** — `tests/protocol-diff.sh` proves it
+The telemetry protocol **did not change** — `lisp/tests/protocol-diff.sh` proves it
 against upstream on every CI run:
 
 | Surface | 6.00 | 7.x | Same? |
@@ -173,9 +173,35 @@ The panel has `fill_rectangle`, `pixel` and `writeblock` and no line, circle or
 polygon, and on the device a draw call costs **2.9 ms whatever its size**. So an
 arc drawn a rectangle per column costs 481 ms — four times the budget for a
 whole frame — and the curves are instead composed into a buffer and pushed in
-one transfer at 12 ms a band. See [davega-gui/README.md](davega-gui/README.md)
+one transfer at 12 ms a band. See [davega/README.md](davega/README.md)
 for the design, and [docs/theme-layouts.md](docs/theme-layouts.md) for what the
 hardware will and will not do.
+
+## How the repo is laid out
+
+Three things live here, split by where the code runs:
+
+```
+vesc/      scripts that drive VESC Tool from your laptop
+  qml/       the VescIf scripts behind `make pull`, `apply`, `ppm-watch`, ...
+  profiles/  connection details per known-good board
+
+lisp/      code that runs ON the motor controller
+  src/       the shim, the flight recorder, and their pieces
+  tests/     run in the real upstream LispBM interpreter, in Docker
+  model/     a Python model of the shim's protocol, and its tests
+
+davega/    code that runs ON the display (and the tools that build it)
+  gui/       ships verbatim to /gui - the same package name on both sides
+  start.py   ships to /start.py; the escape hatch
+  harness/   a host-side stand-in for the panel, so tests need no hardware
+  tests/     390 checks
+  tools/     WebREPL client, mockup and screenshot generators
+```
+
+`docs/` is the writing: [findings](docs/findings.md),
+[connecting](docs/connecting.md), [the display](docs/davega-x.md),
+[what the panel will draw](docs/theme-layouts.md).
 
 ## Requirements
 
@@ -197,7 +223,7 @@ repo: **[docs/connecting.md](docs/connecting.md)**.
 the bridge listens on port **65102** and accepts **one client at a time**, so
 close desktop VESC Tool.
 
-**2. On the laptop** — put the address in `profiles/local.mk` (gitignored):
+**2. On the laptop** — put the address in `vesc/profiles/local.mk` (gitignored):
 
 ```make
 HOST  ?= 192.168.1.100   # phone running the bridge
@@ -219,13 +245,13 @@ you to interpret a two-minute timeout.
 Every target takes `PROFILE=`:
 
 ```sh
-make pull PROFILE=profiles/local.mk
-make davega-debug PROFILE=profiles/nazare-unity.mk
+make pull PROFILE=vesc/profiles/local.mk
+make davega-debug PROFILE=vesc/profiles/nazare-unity.mk
 ```
 
 ## Board profiles
 
-`profiles/` holds one file per known-good setup — connection details and the
+`vesc/profiles/` holds one file per known-good setup — connection details and the
 second motor's CAN id. Deliberately **not** motor tuning: current limits and
 gearing are specific to your hardware and copying someone else's is how motors
 and packs get damaged. Run the detection wizard.

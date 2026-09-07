@@ -106,7 +106,7 @@ WebREPL. Power-cycle the board and the stock app comes back.
    should not be written until the first two work.
 
 Only after those three is the proxy safe to replace with
-[the flight recorder](../davega-shim/lisp/logger.lisp).
+[the flight recorder](../lisp/src/logger.lisp).
 
 ## Testing the new views before then
 

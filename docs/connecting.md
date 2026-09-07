@@ -121,11 +121,11 @@ The Makefile detects the OS and picks the right one. Override with `VESC=`.
 
 ### 3. This repo
 
-Put your phone's IP in a profile. `profiles/local.mk` is gitignored, so it is
+Put your phone's IP in a profile. `vesc/profiles/local.mk` is gitignored, so it is
 the right place for anything specific to your network:
 
 ```make
-# profiles/local.mk
+# vesc/profiles/local.mk
 HOST  ?= 192.168.1.100   # phone running the bridge
 PORT  ?= 65102
 CANID ?= 124             # second motor thread, if you have one
@@ -142,7 +142,7 @@ apart before you waste two minutes on a timeout.
 Every other target takes the same profile:
 
 ```sh
-make pull PROFILE=profiles/local.mk
+make pull PROFILE=vesc/profiles/local.mk
 ```
 
 ## What you get once connected
@@ -169,7 +169,7 @@ Two that will cost you an afternoon if you get them wrong:
 - **`commands().lispWriteCode()` does not land code.** The ESC reports "did you
   forget to upload the code". Use `CodeLoader.lispUploadFromPath` instead —
   upload happens in 384-byte chunks with a per-chunk timeout, which is why
-  `tools/minify-lisp.py` exists.
+  `lisp/minify.py` exists.
 
 ## Connection troubleshooting
 

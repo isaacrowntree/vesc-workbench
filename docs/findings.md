@@ -120,7 +120,7 @@ The proxy's original read loop asked for both frame header bytes in one call and
 treated a short payload read as a corrupt frame. Both cost whole request/reply
 round trips, which the DAVEGA showed as a readout updating in lurches.
 
-`tests/lisp/test_reader.lisp` drives the real reader through a fake UART that
+`lisp/tests/test_reader.lisp` drives the real reader through a fake UART that
 can split a header across reads. Against the old loop, one 1-byte short read at
 the head of a 10-frame stream lost **all ten frames**.
 
@@ -172,7 +172,7 @@ UART call on every frame to defend against a case that happens rarely. The
 current reader keeps the single 2-byte header read as the fast path and handles
 both misalignments explicitly, recovering most of the difference.
 
-The last row is the interesting one. `tests/lisp/bench_reader.lisp` runs
+The last row is the interesting one. `lisp/tests/bench_reader.lisp` runs
 candidate readers over the same wire and counts UART calls, which is what the
 interpreter actually pays for. It showed the shipped reader spending **three
 reads per frame** - header, payload, then crc and stop byte - when the length
