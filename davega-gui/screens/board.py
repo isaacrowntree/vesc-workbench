@@ -21,6 +21,16 @@ DISCHARGE_TICKS = {
 }
 
 
+class Frame(dict):
+    """One telemetry sample, in real units."""
+
+    def __getattr__(self, k):
+        try:
+            return self[k]
+        except KeyError:
+            raise AttributeError(k)
+
+
 class Board:
     """A board's configuration, which is what turns raw fields into bounds.
 
@@ -199,3 +209,30 @@ class Board:
         return wheel_rpm * 60.0 * math.pi * self.wheel_m / 1000.0
 
     # -- frames -----------------------------------------------------------
+
+    def frame(self, **over):
+        f = Frame(
+            temp_fet_filtered=25.0, temp_motor_filtered=25.0, duty=0.0,
+            input_voltage=self.v_nominal, avg_motor_current=0.0,
+            avg_input_current=0.0, rpm=0.0, amp_hours=0.0,
+            amp_hours_charged=0.0, watt_hours=0.0, watt_hours_charged=0.0,
+            tachometer_abs_value=0, fault=0, can_id=123,
+            # Session and lifetime aggregates. The ESC does not send these -
+            # the display accumulates them - but screens render them, so they
+            # belong in the frame the screens are tested against.
+            max_erpm=0.0, avg_erpm=0.0, time_riding_ms=0,
+            lifetime_tacho=0, lifetime_wh=0.0,
+            # Link health, and the accumulated session. The runner publishes
+            # these under a prefix - s_ for this ride, l_ for lifetime - so a
+            # screen reads them like any other field and never holds a
+            # reference to an accumulator.
+            link_ok=True, r_internal=0.0, soc=None,
+            s_trip_km=0.0, s_riding_ms=0, s_elapsed_ms=0, s_max_kph=0.0,
+            s_avg_kph=0.0, s_min_voltage=0.0, s_max_fet=0.0,
+            s_max_motor_temp=0.0, s_max_current=0.0, s_min_current=0.0,
+            s_max_batt_current=0.0, s_wh_spent=0.0, s_wh_per_km=0.0,
+            s_range_km=0.0,
+            l_trip_km=0.0, l_riding_ms=0, l_max_kph=0.0, l_wh_spent=0.0,
+            l_max_fet=0.0, l_max_current=0.0, l_min_voltage=0.0)
+        f.update(over)
+        return f
