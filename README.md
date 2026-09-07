@@ -272,7 +272,7 @@ and packs get damaged. Run the detection wizard.
 | DAVEGA X WebREPL scripts | ✅ run on the display — settings read and written, gearing corrected — [docs](docs/davega-x.md) |
 | Replacement dashboard | ✅ installed and running on the display, ten layouts, bytecode — [design](davega/README.md) |
 | Dashboard tested in the real interpreter | ✅ MicroPython 1.14 in Docker, end to end — [how](davega/tests/device/README.md) |
-| Tested in motion | ⚠️ **not yet.** Telemetry, CAN, range and the buttons are all verified on the bench and in the harness. The board has not been ridden since. |
+| Tested in motion | ✅ ridden, and it holds up |
 
 ## Safety
 
