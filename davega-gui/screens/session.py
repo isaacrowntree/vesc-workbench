@@ -70,7 +70,14 @@ class Session:
             self._tacho0 = tacho
         self.trip_km = self.board.km_for_tacho(tacho - self._tacho0)
 
+        # The ESC's own watt-hour counter where it has one. Firmwares that
+        # leave it at zero still count amp hours, and amp hours times the
+        # pack's nominal voltage is the same number to within the sag - which
+        # beats an energy total that never moves and a range that never
+        # appears.
         wh = f.get("watt_hours", 0.0)
+        if not wh:
+            wh = f.get("amp_hours", 0.0) * self.board.v_nominal
         if self._wh0 is None or wh < self._wh0:
             self._wh0 = wh
         self.wh_spent = wh - self._wh0
@@ -111,17 +118,25 @@ class Session:
             return 0.0
         return self.wh_spent / self.trip_km
 
-    def range_km(self, f):
+    def measured(self):
+        """Has this ride gone far enough to have an opinion of its own?
+
+        Half a kilometre. Two hundred metres produces a confident-looking
+        number built on almost nothing.
+        """
+        return self.trip_km >= MIN_EVIDENCE_KM and self.wh_per_km > 0.0
+
+    def range_km(self, f, fallback_rate=0.0):
         """Remaining range at this ride's efficiency.
 
-        Returns 0.0 when there is not enough evidence yet, rather than a
-        confident number derived from thirty metres of riding.
+        Before the ride has measured its own, it runs on `fallback_rate` -
+        the board's lifetime average, or its configured default. Voltage
+        gives the energy left; only a rate turns that into kilometres, and
+        the moment a rider most wants the number is before they have ridden
+        far enough to have measured one.
         """
-        rate = self.wh_per_km
-        # Half a kilometre before it will answer. Two hundred metres of
-        # riding produces a confident-looking number built on almost nothing,
-        # and a range estimate people trust is worse than one they wait for.
-        if rate <= 0.0 or self.trip_km < MIN_EVIDENCE_KM:
+        rate = self.wh_per_km if self.measured() else fallback_rate
+        if rate <= 0.0:
             return 0.0
         # Not remaining-energy-over-rate: the kilometres left cost more than
         # the ones behind you, because power falls with voltage and sag

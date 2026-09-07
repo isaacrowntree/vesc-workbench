@@ -237,10 +237,66 @@ davega-gate:
 	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) \
 	  -f davega-shim/webrepl/recon.py -e "probe('frozen.run_standard')"
 
+# Push the dashboard to the display, as bytecode.
+#
+# MicroPython compiles a .py every single time it imports it, and on this
+# ESP32 that compile is most of the wait between switching the board on and
+# seeing a number. mpy-cross does it once, here: 162 kB of source becomes
+# 60 kB of bytecode with no compile step left to run on the device.
+#
+# mpy v5 is what MicroPython 1.14 loads (sys.implementation.mpy == 10757), and
+# mpy-cross 1.12 is the newest release on PyPI that still emits it.
+MPY_VERSION ?= 1.12
+MPY_VENV := build/mpy-venv
+MPY_CROSS := $(MPY_VENV)/bin/mpy-cross-bin
+MODULES ?= $(basename $(notdir $(wildcard davega-gui/screens/*.py)))
+LAYOUTS ?= $(basename $(notdir $(wildcard davega-gui/screens/layouts/*.py)))
+
+$(MPY_CROSS):
+	@echo "fetching mpy-cross $(MPY_VERSION) (emits the mpy v5 the display loads)"
+	@python3 -m venv $(MPY_VENV)
+	@$(MPY_VENV)/bin/pip install --quiet 'mpy-cross==$(MPY_VERSION)'
+	@ln -sf "$$($(MPY_VENV)/bin/python -c 'import mpy_cross;print(mpy_cross.mpy_cross)')" $(MPY_CROSS)
+
+# Compile everything that ships. `start.py` is deliberately absent: it is the
+# escape hatch, and an escape hatch that depends on the toolchain having run
+# is not one.
+mpy: $(MPY_CROSS)
+	@rm -rf build/mpy && mkdir -p build/mpy/layouts
+	@for f in davega-gui/screens/*.py davega-gui/runner.py davega-gui/boot.py; do \
+	  $(MPY_CROSS) -o build/mpy/`basename $$f .py`.mpy $$f || exit 1; done
+	@for f in davega-gui/screens/layouts/*.py; do \
+	  $(MPY_CROSS) -o build/mpy/layouts/`basename $$f .py`.mpy $$f || exit 1; done
+	@echo "compiled `ls build/mpy/*.mpy build/mpy/layouts/*.mpy | wc -l | tr -d ' '` modules" \
+	  "(`cat davega-gui/screens/*.py davega-gui/screens/layouts/*.py | wc -c | tr -d ' '` B source" \
+	  "-> `cat build/mpy/*.mpy build/mpy/layouts/*.mpy | wc -c | tr -d ' '` B bytecode)"
+
+davega-install: mpy
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) --mkdir /gui \
+	  --mkdir /gui/layouts \
+	  $(foreach m,$(MODULES),--put build/mpy/$(m).mpy:/gui/$(m).mpy) \
+	  $(foreach l,$(LAYOUTS),--put build/mpy/layouts/$(l).mpy:/gui/layouts/$(l).mpy) \
+	  --put build/mpy/runner.mpy:/gui/runner.mpy \
+	  --put build/mpy/boot.mpy:/gui/boot.mpy \
+	  --put davega-gui/start.py:/start.py
+	@echo "installed - restart the display when you want it"
+
+# Source instead of bytecode, for when you want to read a traceback with real
+# line numbers on the device.
+davega-install-src:
+	@python3 tools/webrepl-run.py --host $(DAVEGA_HOST) --mkdir /gui \
+	  --mkdir /gui/layouts \
+	  $(foreach m,$(MODULES),--put davega-gui/screens/$(m).py:/gui/$(m).py) \
+	  $(foreach l,$(LAYOUTS),--put davega-gui/screens/layouts/$(l).py:/gui/layouts/$(l).py) \
+	  --put davega-gui/runner.py:/gui/runner.py \
+	  --put davega-gui/boot.py:/gui/boot.py \
+	  --put davega-gui/start.py:/start.py
+	@echo "installed as source - restart the display when you want it"
+
 # Regenerate the screen mockups from the code that draws them.
 mockups:
 	@python3 tools/mockup.py
-	@echo "open davega-gui/mockups/screens.html"
+	@echo "open davega-gui/mockups/index.html"
 
 webrepl: $(WEBREPL)
 	@echo "1. hold UP+DOWN and power-cycle the board - the DAVEGA has no switch,"

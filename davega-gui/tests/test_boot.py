@@ -62,20 +62,34 @@ for name in ("palette", "themes", "widgets", "base", "board", "anim", "startup",
     sys.modules["gui." + name] = mod
 sys.modules["gui.runner"] = __import__("runner")
 
-# --- run start.py's wiring, bounded ------------------------------------
-src = open(os.path.join(ROOT, "start.py")).read()
-src = src.replace("while True:", "for _loop in range(40):")
-src = src.replace('LIFETIME_PATH = "/data/gui-lifetime.json"',
-                  'LIFETIME_PATH = %r' % LIFE)
-# Force the periodic save to fire inside a short run, so the path that keeps
-# lifetime totals across a power cycle is actually exercised.
-src = src.replace("SAVE_EVERY_MS = 5 * 60 * 1000", "SAVE_EVERY_MS = 5")
+# --- run the boot path, bounded ----------------------------------------
+# start.py is the escape hatch and gui/boot.py is the dashboard. Both are
+# exercised: boot.py for the wiring, start.py for the hatch and the failure
+# report, because between them they are what happens when the board is
+# switched on.
 ERR = os.path.join(tempfile.gettempdir(), "gui-error-smoke.txt")
 if os.path.exists(ERR):
     os.remove(ERR)
-src = src.replace('ERROR_PATH = "/data/gui-error.txt"', 'ERROR_PATH = %r' % ERR)
-ns = {"__name__": "start"}
-exec(compile(src, "start.py", "exec"), ns)
+
+
+def _load(path, **subs):
+    src = open(os.path.join(ROOT, path)).read()
+    for a, b in subs.items():
+        src = src.replace(a, b)
+    return src
+
+
+boot_src = _load(
+    "boot.py",
+    **{"while True:": "for _loop in range(40):",
+       'LIFETIME_PATH = "/data/gui-lifetime.json"': 'LIFETIME_PATH = %r' % LIFE,
+       # Force the periodic save to fire inside a short run, so the path that
+       # keeps lifetime totals across a power cycle is actually exercised.
+       "SAVE_EVERY_MS = 5 * 60 * 1000": "SAVE_EVERY_MS = 5",
+       'ERROR_PATH = "/data/gui-error.txt"': 'ERROR_PATH = %r' % ERR})
+ns = {"__name__": "gui.boot"}
+exec(compile(boot_src, "boot.py", "exec"), ns)
+ns["main"]()
 
 d = disp.DISPLAY
 fails = []
@@ -90,7 +104,7 @@ def check(name, cond, detail=""):
 
 
 print("== the boot path wires up and draws")
-check("start.py drew a dashboard (%d calls)" % len(d.calls), len(d.calls) > 50)
+check("boot.py drew a dashboard (%d calls)" % len(d.calls), len(d.calls) > 50)
 check("lifetime totals were persisted", os.path.exists(LIFE))
 if os.path.exists(LIFE):
     import json
@@ -99,19 +113,38 @@ if os.path.exists(LIFE):
           "trip_km" in saved and "max_fet" in saved,
           "got %s" % sorted(saved)[:4])
 
-# and confirm the escape hatch stands the dash down
+# --- start.py: the escape hatch and the failure report ------------------
+# It is deliberately the one file that is not bytecode, because it has to work
+# when /gui does not. So it is tested against a *stubbed* gui.boot: what
+# matters here is whether it calls the dashboard, not what the dashboard does.
+called = []
+fake_boot = types.ModuleType("gui.boot")
+fake_boot.main = lambda: called.append(True)
+sys.modules["gui.boot"] = fake_boot
+gui.boot = fake_boot
+
+start_src = _load("start.py",
+                  **{'ERROR_PATH = "/data/gui-error.txt"': 'ERROR_PATH = %r' % ERR})
+
 buttons.BUTTON_UP = Pin(0)      # held
 d.reset_state()
-ns2 = {"__name__": "start"}
-exec(compile(src, "start.py", "exec"), ns2)
-check("holding UP stands the dash down for the stock app", len(d.calls) == 0,
-      "drew %d calls" % len(d.calls))
+exec(compile(start_src, "start.py", "exec"), {"__name__": "start"})
+check("holding UP stands the dash down for the stock app",
+      not called and len(d.calls) == 0,
+      "called=%s drew %d calls" % (called, len(d.calls)))
+
+buttons.BUTTON_UP = Pin(1)      # not held
+exec(compile(start_src, "start.py", "exec"), {"__name__": "start"})
+check("otherwise it runs the dashboard", bool(called))
 
 # A boot that fails must leave an explanation behind, or diagnosing it costs a
 # WebREPL session and a round trip.
-buttons.BUTTON_UP = Pin(1)
-broken = src.replace("import gui.device as device", "import gui.nonexistent as device")
-exec(compile(broken, "start.py", "exec"), {"__name__": "start"})
+def _boom():
+    raise ImportError("no module named 'gui.nonexistent'")
+
+
+fake_boot.main = _boom
+exec(compile(start_src, "start.py", "exec"), {"__name__": "start"})
 check("a failed boot writes the traceback where it survives",
       os.path.exists(ERR))
 if os.path.exists(ERR):

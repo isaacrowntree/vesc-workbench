@@ -219,6 +219,21 @@ def main():
           "differs")
 
     print()
+    print("== range answers from cold, on a borrowed rate")
+    # The moment a rider most wants a range is before they have ridden far
+    # enough to have measured one. Two dashes at the kerb is the failure this
+    # guards against.
+    b = Board()
+    cold = Session(b)
+    f = b.nominal()
+    check("no evidence of its own yet", not cold.measured())
+    est = cold.range_km(f, 18.0)
+    check("but it still answers %.0f km" % est, est > 0.0)
+    check("and says the figure is borrowed", not cold.measured())
+    check("with no rate at all it declines rather than invents",
+          cold.range_km(f, 0.0) == 0.0)
+
+    print()
     if fails:
         print("%d SESSION TESTS FAILED" % len(fails))
         return 1

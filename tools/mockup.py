@@ -21,7 +21,7 @@ from screens.riding import Riding                                # noqa: E402
 from screens.panels import (RangeScreen, OverviewScreen,         # noqa: E402
                             SessionScreen, LifetimeScreen)
 from screens.startup import Splash                               # noqa: E402
-from screens.themes import THEMES                                # noqa: E402
+from screens.themes import THEMES, DEFAULT                       # noqa: E402
 
 W, H = 240, 320
 SCREENS = (("riding", Riding), ("range", RangeScreen),
@@ -94,7 +94,6 @@ def frame(board):
     f["temp_fet_filtered"] = 42.0
     f["temp_motor_filtered"] = 48.0
     f["s_range_km"] = 21.0
-    f["gear"] = 3
     return f
 
 
@@ -129,45 +128,116 @@ def render_all(theme):
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "davega-gui/mockups/screens.html"
-    theme = sys.argv[2] if len(sys.argv) > 2 else "nazare"
-    shots = render_all(theme)
-    t = THEMES[theme]
-    cards = "".join(
-        '<figure><div class="screen">%s</div>'
-        '<figcaption><b>%s</b><span>%s</span></figcaption></figure>'
-        % (svg, title, key) for key, title, svg in shots)
-    html = """<title>%s screens</title>
+    out = sys.argv[1] if len(sys.argv) > 1 else "davega-gui/mockups/index.html"
+    keys = sorted(THEMES)
+    panels, tabs, swatches = [], [], []
+    for key in keys:
+        t = THEMES[key]
+        tabs.append('<button data-theme="%s"%s>%s</button>'
+                    % (key, ' class="on"' if key == DEFAULT else "", t.name))
+        for mode in ("dark", "light"):
+            shots = render_all(key + ("@light" if mode == "light" else ""))
+            cards = "".join(
+                '<figure><div class="screen">%s</div>'
+                '<figcaption><b>%s</b><span>%s</span></figcaption></figure>'
+                % (svg, title, name) for name, title, svg in shots)
+            panels.append('<div class="grid" data-theme="%s" data-mode="%s"%s>'
+                          '%s</div>'
+                          % (key, mode,
+                             "" if (key == DEFAULT and mode == "dark")
+                             else " hidden", cards))
+        # The declared colours, shown as swatches. The theme tests read this
+        # page back and fail if a colour is declared but never rendered - a
+        # palette nobody has looked at is how the unreadable ones survived.
+        # The chip is painted in what the panel actually shows - the colour
+        # after the round to 16-bit - and labelled with what themes.py
+        # declares. Where those differ, the difference is the hardware.
+        declared = dict(zip(("ground", "ink", "accent", "warn", "danger",
+                             "track", "dim"), t._src))
+        declared["dim"] = declared["dim"] or declared["track"]
+        chips = "".join('<i style="background:%s" title="%s %s %s"></i>'
+                        % (hexc(c), key, n, declared[n])
+                        for n, c in (("ground", t.ground), ("ink", t.ink),
+                                     ("accent", t.accent), ("warn", t.warn),
+                                     ("danger", t.danger), ("track", t.track),
+                                     ("dim", t.dim)))
+        swatches.append('<div class="sw" data-theme="%s"%s>%s<em>%s &mdash; %s'
+                        '</em></div>'
+                        % (key, "" if key == DEFAULT else " hidden",
+                           chips, t.name, t.lineage))
+
+    html = """<title>DAVEGA screens</title>
 <style>
  :root { color-scheme: dark; }
  body { background:#0b0d10; color:#e8ecf4; margin:0;
         font:14px/1.5 ui-sans-serif,system-ui,sans-serif; }
- .wrap { max-width:1180px; margin:0 auto; padding:36px 24px 64px; }
+ .wrap { max-width:1240px; margin:0 auto; padding:36px 24px 64px; }
  h1 { font-size:30px; margin:0 0 6px; letter-spacing:-.01em; }
- .sub { color:#7a8496; margin:0 0 28px; max-width:64ch; }
- .grid { display:grid; gap:26px; grid-template-columns:repeat(auto-fill,minmax(272px,1fr)); }
+ .sub { color:#7a8496; margin:0 0 22px; max-width:66ch; }
+ code { font:12px ui-monospace,Menlo,monospace; color:#9fb0c6; }
+ .bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+        margin:0 0 14px; }
+ .bar button { background:#14171c; color:#9aa5b6; border:1px solid #262b33;
+               padding:6px 12px; font:13px inherit; cursor:pointer; }
+ .bar button.on { background:#e8ecf4; color:#0b0d10; border-color:#e8ecf4; }
+ .bar .spacer { flex:1 }
+ .sw { display:flex; align-items:center; gap:6px; margin:0 0 22px; }
+ .sw i { width:26px; height:16px; border:1px solid #2c323b; }
+ .sw em { color:#6c7688; font-style:normal;
+          font:11px ui-monospace,Menlo,monospace; margin-left:8px; }
+ .grid { display:grid; gap:22px;
+         grid-template-columns:repeat(auto-fill,minmax(272px,1fr)); }
  figure { margin:0; background:#14171c; border:1px solid #262b33; }
- .screen { padding:16px; display:flex; justify-content:center; background:#000; }
- figcaption { display:flex; align-items:baseline; gap:10px; padding:10px 14px;
+ .screen { padding:15px; display:flex; justify-content:center; background:#000; }
+ figcaption { display:flex; align-items:baseline; gap:10px; padding:9px 13px;
               border-top:1px solid #262b33; }
- figcaption b { font-size:15px; }
+ figcaption b { font-size:14px; }
  figcaption span { margin-left:auto; color:#6c7688;
                    font:11px ui-monospace,Menlo,monospace; }
- code { font:12px ui-monospace,Menlo,monospace; color:#9fb0c6; }
+ [hidden] { display:none !important; }
 </style>
 <div class="wrap">
-<h1>%s &mdash; every screen</h1>
+<h1>DAVEGA &mdash; every screen, every theme</h1>
 <p class="sub">Generated from the screen code by <code>tools/mockup.py</code>,
 at true device size (240&times;320). Rectangles are exactly what the display
 draws; the large digits are the 3&times;5 font rendered as rectangles, which is
 how they are drawn on the panel. Small labels are set in a monospace face here
 rather than as solid blocks, so the page is readable &mdash; on the device they
-are the firmware's own 8&times;8 font.</p>
-<div class="grid">%s</div>
-</div>""" % (t.name, t.name, cards)
+are the firmware's own 8&times;8 font. Day and night are the same theme: the
+light variant is derived from the dark one, not hand-authored.</p>
+<div class="bar">%s<span class="spacer"></span>
+ <button data-mode="dark" class="on">Night</button>
+ <button data-mode="light">Day</button></div>
+%s
+%s
+</div>
+<script>
+ var theme = %r, mode = "dark";
+ function sync() {
+   document.querySelectorAll(".grid").forEach(function (g) {
+     g.hidden = !(g.dataset.theme === theme && g.dataset.mode === mode);
+   });
+   document.querySelectorAll(".sw").forEach(function (s) {
+     s.hidden = s.dataset.theme !== theme;
+   });
+   document.querySelectorAll(".bar button").forEach(function (b) {
+     var mine = b.dataset.theme ? b.dataset.theme === theme
+                                : b.dataset.mode === mode;
+     b.classList.toggle("on", mine);
+   });
+ }
+ document.querySelectorAll(".bar button").forEach(function (b) {
+   b.addEventListener("click", function () {
+     if (b.dataset.theme) { theme = b.dataset.theme; } else { mode = b.dataset.mode; }
+     sync();
+   });
+ });
+ sync();
+</script>""" % ("".join(tabs), "".join(swatches), "".join(panels), DEFAULT)
     with open(out, "w") as fh:
         fh.write(html)
-    print("wrote %s (%d screens, theme %s)" % (out, len(shots), theme))
+    print("wrote %s (%d themes x 2 x %d screens)"
+          % (out, len(keys), len(SCREENS) + 2))
 
 
 if __name__ == "__main__":

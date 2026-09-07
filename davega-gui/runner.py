@@ -16,7 +16,7 @@ STALE_MS = 1500
 class Runner:
     def __init__(self, app, display, uart, board, buttons, ticks_ms, ticks_diff,
                  sleep_ms, vesc, esc_count=1, session=None, lifetime=None,
-                 resistance=None):
+                 resistance=None, can_ids=()):
         self.app = app
         self.d = display
         self.uart = uart
@@ -27,6 +27,12 @@ class Runner:
         self._sleep = sleep_ms
         self.vesc = vesc
         self.esc_count = esc_count
+        #: other controllers on the CAN bus, asked through the local one. A
+        #: Unity is two of them in one case and the reply carries only the
+        #: controller that answered.
+        self.can_ids = tuple(can_ids)
+        self.can_ok = 0
+        self.can_bad = 0
         self.frame = board.frame()
         self.last_good = None
         self.stale = False
@@ -39,17 +45,44 @@ class Runner:
         self._last_tick = None
 
     def poll_telemetry(self):
-        """One request/reply. Returns True if the frame was updated."""
+        """One request/reply per controller. Returns True if the frame moved.
+
+        The local ESC is asked over the wire and the rest through it, over
+        CAN. If a CAN read fails the frame still updates from the controller
+        that did answer, scaled by `esc_count` - half the board measured is
+        better than none, and a dropped packet should not make the pack draw
+        appear to halve.
+        """
         try:
             self.vesc.request(self.uart)
             packet = self.vesc.read(self.uart, UPDATE_MS, self._now, self._diff)
-            values = self.vesc.parse(packet, self.esc_count)
+            values = self.vesc.parse(packet)
         except Exception:                       # noqa: BLE001
             values = None
         self.reads += 1
         if values is None:
             self.bad += 1
             return False
+
+        for can_id in self.can_ids:
+            other = None
+            try:
+                self.uart.write(self.vesc.can_request(can_id))
+                pkt = self.vesc.read(self.uart, UPDATE_MS, self._now,
+                                     self._diff)
+                other = self.vesc.parse(pkt)
+            except Exception:                   # noqa: BLE001
+                other = None
+            if other is None:
+                self.can_bad += 1
+            else:
+                self.can_ok += 1
+                values = self.vesc.combine(values, other)
+        if self.esc_count != 1 and values.get("esc_count", 1) == 1:
+            # Nothing came back from the other controller, so fall back to the
+            # reference firmware's assumption of two equal halves rather than
+            # letting the board appear to draw half of what it does.
+            values["avg_input_current"] *= self.esc_count
         self.frame.update(values)
         self.last_good = self._now()
         return True
@@ -94,6 +127,9 @@ class Runner:
         dt = 0 if self._last_tick is None else self._diff(now, self._last_tick)
         self._last_tick = now
         if self.session is not None and dt > 0:
+            # A ride with no history of its own borrows the board's.
+            if self.lifetime is not None:
+                self.session._lifetime_rate = self.lifetime.wh_per_km
             self.session.update(self.frame, dt)
             _publish(self.frame, self.session, "s_", self.board)
         if self.lifetime is not None:
@@ -133,4 +169,11 @@ def _publish(frame, session, prefix, board):
     frame[prefix + "max_batt_current"] = session.max_batt_current
     frame[prefix + "wh_spent"] = session.wh_spent
     frame[prefix + "wh_per_km"] = session.wh_per_km
-    frame[prefix + "range_km"] = session.range_km(frame)
+    # The rate this ride has not earned yet: what the board has averaged over
+    # its life, and failing that what it was told to assume.
+    fallback = getattr(board, "wh_per_km", 0.0)
+    lifetime_rate = getattr(session, "_lifetime_rate", 0.0)
+    if lifetime_rate > 0.0:
+        fallback = lifetime_rate
+    frame[prefix + "range_km"] = session.range_km(frame, fallback)
+    frame[prefix + "range_measured"] = session.measured()

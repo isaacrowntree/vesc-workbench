@@ -102,6 +102,12 @@ def contrast(fg, bg):
 # in sunlight is a harsher environment than either, so:
 MIN_PRIMARY = 7.0     # speed, battery percentage - the things you must read
 MIN_LABEL = 4.5       # labels and secondary values
+# An unlit gauge segment is not text - it does not have to be legible, it has
+# to be *visible*, so you can see where the bar ends. Below about 1.35:1 on a
+# 2.8" panel in daylight it disappears into the ground and a half-empty bar
+# reads as a short bar. MIN_LIT keeps the lit part dominant over it.
+MIN_TRACK = 1.35      # unlit gauge segment against the ground
+MIN_LIT = 3.0         # accent against the track it sits in
 
 
 # -- colour blindness --------------------------------------------------------

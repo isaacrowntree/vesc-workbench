@@ -80,13 +80,20 @@ def _replace(tup, i, v):
 
 
 def attach():
-    """Wrap the real buttons. Active low, so a press reads 0."""
+    """Wrap the real buttons. Active low, so a press reads 0.
+
+    The vendor's names run the other way round from the panel: the button
+    `frozen.buttons` calls BUTTON_UP is the one on the right, so taking the
+    names at face value made the right-hand button page backwards. Swapped
+    here, at the boundary, so that everything above deals in what the rider
+    pressed rather than in what the pin was called.
+    """
     from frozen.buttons import BUTTON_UP, BUTTON_DOWN, BUTTON_ENTER
     import utime
 
     def read():
-        return (not BUTTON_UP.value(),
-                not BUTTON_DOWN.value(),
+        return (not BUTTON_DOWN.value(),
+                not BUTTON_UP.value(),
                 not BUTTON_ENTER.value())
 
     return Buttons(read, utime.ticks_ms)

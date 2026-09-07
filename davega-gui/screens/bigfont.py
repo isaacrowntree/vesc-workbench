@@ -15,8 +15,14 @@ Bit i of each column byte is row i, top to bottom.
 
 # Bytes lifted from frozen.display_util.FONT_3X5 on the device, so the digits
 # match the ones the stock display draws.
-FONT = (b"\x1f\x11\x1f\x00\x00\x1f\x1d\x15\x17\x11\x15\x1f\x07\x04\x1f"
-        b"\x17\x15\x1d\x1f\x15\x1d\x01\x01\x1f\x1f\x15\x1f\x17\x15\x1f")
+FONT = bytearray(b"\x1f\x11\x1f\x00\x00\x1f\x1d\x15\x17\x11\x15\x1f\x07\x04\x1f"
+                 b"\x17\x15\x1d\x1f\x15\x1d\x01\x01\x1f\x1f\x15\x1f\x17\x15\x1f")
+
+# The stock '1' is the right-hand column and nothing else, which at speed
+# reads as a stray bar rather than a numeral - "12" looks like "2" with a
+# tally mark beside it. Give it a flag and a foot, the way a 1 is drawn
+# everywhere else, so two digits read as two digits.
+FONT[3], FONT[4], FONT[5] = 0b10010, 0b11111, 0b10000
 
 COLS, ROWS = 3, 5
 GAP = 1                       # columns of space between digits

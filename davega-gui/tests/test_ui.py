@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
-from harness.display import Display, OutOfBounds                  # noqa: E402
+from harness.display import Display, glyph_size, OutOfBounds                  # noqa: E402
 from harness.telemetry import Board                               # noqa: E402
 from screens.riding import Riding                                 # noqa: E402
 from screens.panels import (RangeScreen, OverviewScreen,          # noqa: E402
@@ -27,6 +27,13 @@ from screens import base                                          # noqa: E402
 SCREENS = (("riding", Riding), ("range", RangeScreen),
            ("overview", OverviewScreen), ("session", SessionScreen),
            ("lifetime", LifetimeScreen))
+
+# The riding screen is nine arrangements, not one: the layout comes from the
+# theme, so a check that only ever looks at Nazare is checking a tenth of what
+# ships. Every layout gets the same overlap, grid and footer checks.
+LAYOUT_THEMES = tuple(sorted(THEMES))
+EVERY = (tuple(("riding/%s" % k, Riding, k) for k in LAYOUT_THEMES)
+         + tuple((n, c, "nazare") for n, c in SCREENS[1:]))
 
 # Device-measured constants (see harness/display.py). A settled frame has to
 # stay usable against 5 Hz telemetry; a full repaint is allowed to be slow
@@ -125,13 +132,17 @@ def main():
     print("== declared regions do not overlap")
     # Overlapping regions are invisible on a full repaint and corrupt the
     # differential path, because repainting one clears part of another.
-    for name, cls in SCREENS:
-        regions = cls("nazare").regions()
+    for name, cls, theme in EVERY:
+        screen = cls(theme)
+        regions = screen.regions()
         clash = None
         for i, a in enumerate(regions):
             for c in regions[i + 1:]:
                 ax, ay, aw, ah = a[1], a[2], a[3], a[4]
                 cx, cy, cw, ch = c[1], c[2], c[3], c[4]
+                allowed = getattr(screen, "overlap_exceptions", set())
+                if ((a[0], c[0]) in allowed or (c[0], a[0]) in allowed):
+                    continue        # declared, and the pair never draw at once
                 if (ax < cx + cw and cx < ax + aw
                         and ay < cy + ch and cy < ay + ah):
                     clash = "%s overlaps %s" % (a[0], c[0])
@@ -254,6 +265,9 @@ def main():
                 and c[1].get("h") == 4 and c[1].get("w") == 4]
         accent = THEMES["nazare"].accent
         on = [j for j, dd in enumerate(dots) if dd.get("color") == accent]
+        if not dots and not cls("nazare", names, i).shows_page_dots:
+            lit.append(True)        # opted out, deliberately and declared
+            continue
         lit.append(len(dots) == len(SCREENS) and on == [i])
     check("page dots show which of the set you are on", all(lit),
           "wrong on %s" % [n for (n, _), ok in zip(SCREENS, lit) if not ok])
@@ -261,14 +275,15 @@ def main():
     # Everything sits on the grid.
     off = []
     xs = set(base.col_x(i) for i in range(base.COLS))
-    for name, cls in SCREENS:
-        for r in cls("nazare", names, 0).regions():
+    for name, cls, theme in EVERY:
+        screen = cls(theme, names, 0)
+        for r in screen.regions():
             if r[0].startswith("hdr_"):
                 continue            # the status strip has its own anchor
             if r[1] == 0 and r[3] == base.W:
                 continue            # full-bleed banners are deliberate
-            if r[0] in getattr(cls, "grid_exceptions", {}):
-                continue            # declared, with a reason, on the class
+            if r[0] in getattr(screen, "grid_exceptions", {}):
+                continue            # declared, with a reason, on the layout
             if r[1] not in xs:
                 off.append("%s/%s x=%d" % (name, r[0], r[1]))
     check("every region starts on a grid column", not off,
@@ -379,6 +394,55 @@ def main():
                         long_values.append("%s/%s=%r" % (name, spec[0], v))
     check("every panel value fits %d characters" % panels.MAX_CHARS,
           not long_values, ", ".join(long_values[:4]))
+
+    print()
+    print("== chrome labels stay out of the regions that repaint")
+    # A label is furniture: it is drawn once and never again. A region is
+    # repainted whenever its value changes, and the panel's font is opaque -
+    # so a label inside a region's box is erased the first time that value
+    # moves and never comes back. It looks right on the bench, at a
+    # standstill, and wrong thirty seconds into a ride.
+    for name, cls, theme in EVERY:
+        screen = cls(theme, names, 0)
+        d = Display()
+        d.set_color(screen.t.ink, screen.t.ground)
+        d.erase()
+        screen.chrome(d)
+        labels = []
+        for call, kw in d.calls:
+            if call != "print":
+                continue
+            lx, ly = kw["pos"]
+            cw, lh = base.glyph_size(kw["text"], kw.get("scale", 1)) \
+                if hasattr(base, "glyph_size") else glyph_size(
+                    kw["text"], kw.get("scale", 1))
+            labels.append((lx, ly, len(kw["text"]) * cw, lh, kw["text"]))
+        clash = []
+        for lx, ly, lw, lh, txt in labels:
+            for r in screen.regions():
+                if r[0].startswith("hdr_"):
+                    continue
+                rx, ry, rw, rh = r[1], r[2], r[3], r[4]
+                if (lx < rx + rw and rx < lx + lw
+                        and ly < ry + rh and ry < ly + lh):
+                    clash.append("%s over %s" % (txt.strip(), r[0]))
+        check("labels/%-16s %2d clear" % (name, len(labels)), not clash,
+              "; ".join(clash[:3]))
+
+    print()
+    print("== nothing paints over the page dots")
+    # The riding screen's fault banner sat exactly on them, so its background
+    # fill erased the one marker telling you where you are in the set - and
+    # only on that screen, which is how it went unnoticed.
+    dots_y = base.H - base.FOOTER_H + 4
+    for name, cls, theme in EVERY:
+        screen = cls(theme, names, 0)
+        if not screen.shows_page_dots:
+            continue
+        covering = [r[0] for r in screen.regions()
+                    if not r[0].startswith("hdr_")
+                    and r[2] < dots_y + 4 and dots_y < r[2] + r[4]]
+        check("dots/%-9s clear" % name, not covering, "covered by %s" % covering)
 
     print()
     print("== the screens use the whole panel")

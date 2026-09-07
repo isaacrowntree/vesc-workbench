@@ -35,23 +35,36 @@ STANDARD = (
     ("duty", 23, ">h", 1000.0),
     ("rpm", 25, ">i", 1.0),
     ("input_voltage", 29, ">h", 10.0),
-    ("amp_hours", 31, ">i", 10.0),
-    ("amp_hours_charged", 35, ">i", 10.0),
+    # Energy counters go out at 1e4, not 1e1. DAVEga's own
+    # get_amphours_discharged() divides by 10 and the result is used directly
+    # as *milliamp* hours - so the wire scale is Ah x 10^4, and reading it at
+    # 10 makes a 0.5 Ah trip look like 500 Ah. lisp/tests pins the layout.
+    ("amp_hours", 31, ">i", 10000.0),
+    ("amp_hours_charged", 35, ">i", 10000.0),
+    ("watt_hours", 39, ">i", 10000.0),
+    ("watt_hours_charged", 43, ">i", 10000.0),
     ("tachometer", 47, ">i", 1.0),
     ("tachometer_abs_value", 51, ">i", 1.0),
 )
 FAULT_OFFSET = 55
 
-# The FOCBOX Unity answers with BOTH motors in one packet, at its own offsets,
-# and the display averages the pairs. Kept for completeness: a Unity on VESC 7
-# speaks the standard layout, and the second motor is reached over CAN.
-UNITY_PAIRS = (
-    ("temp_fet_filtered", (3, 5), ">h", 10.0),
-    ("temp_motor_filtered", (7, 9), ">h", 10.0),
-    ("avg_motor_current", (11, 15), ">i", 100.0),
-    ("duty", (39, 41), ">h", 1000.0),
-    ("rpm", (43, 47), ">i", 1.0),
-)
+CAN_ID_OFFSET = 60
+COMM_FORWARD_CAN = 34
+
+
+def can_request(can_id):
+    """The GET_VALUES request, wrapped so the local ESC forwards it to another
+    controller on the CAN bus.
+
+    A Unity is two controllers in one case (123 and 124 here) and the standard
+    reply carries only the one that answered - its own temperature, its own
+    motor current, its own tachometer. Asking the second one directly is the
+    difference between reading the board and reading half of it.
+    """
+    payload = bytes((COMM_FORWARD_CAN, can_id, COMM_GET_VALUES))
+    c = crc16(payload)
+    return bytes((START_SHORT, len(payload))) + payload + bytes(
+        (c >> 8, c & 0xFF, STOP))
 
 
 def crc16(data):
@@ -80,10 +93,16 @@ def parse(packet, esc_count=1):
     """Reply bytes to real units. Returns None if the packet is not sound -
     a wrong number rendered confidently is worse than no number.
 
-    `esc_count` scales pack current: each ESC reports only what it draws, so a
-    dual-motor board draws twice what one packet says. The reference firmware
-    does the same (`get_battery_current() * VESC_COUNT`), and without it a
-    dual board under-reports its pack draw by half.
+    `esc_count` scales pack current when only one controller has been read:
+    each ESC reports the share of the pack it draws, so a dual board pulls
+    twice what one packet says. It is the reference firmware's approximation
+    (`get_battery_current() * VESC_COUNT`) and it assumes the two are doing
+    equal work. Prefer reading the other controller over CAN and `combine`-ing
+    the results; this is the fallback for when that read fails.
+
+    Motor current is deliberately not scaled. It is a per-motor figure in the
+    reference too - the Unity path averages the pair rather than adding them -
+    because what a motor current means is measured against one motor's limit.
     """
     if not valid(packet):
         return None
@@ -91,12 +110,45 @@ def parse(packet, esc_count=1):
     for name, off, fmt, div in STANDARD:
         (raw,) = struct.unpack(fmt, packet[off:off + struct.calcsize(fmt)])
         out[name] = raw / div if div != 1.0 else raw
-    out["avg_input_current"] *= esc_count
+    if esc_count != 1:
+        out["avg_input_current"] *= esc_count
     out["fault"] = packet[FAULT_OFFSET] if len(packet) > FAULT_OFFSET else 0
-    # Fields the ESC does not send, which screens still render.
-    out["watt_hours"] = 0.0
-    out["watt_hours_charged"] = 0.0
-    out["can_id"] = 0
+    out["can_id"] = (packet[CAN_ID_OFFSET]
+                     if len(packet) > CAN_ID_OFFSET else 0)
+    return out
+
+
+def combine(primary, other):
+    """One board's numbers from two controllers.
+
+    Follows `vesc_comm_unity.cpp`, which is the reference doing this same job
+    for a board that answers for both motors in one packet:
+
+    * pack current and the energy counters are **summed** - each controller
+      reports only the share it drew, and the pack saw all of it;
+    * motor current, duty and rpm are **averaged** - they are per-motor
+      quantities, measured against one motor's limits, and the reference
+      averages them too;
+    * the tachometers each count the same road, so distance comes from the
+      primary rather than being added twice.
+
+    Temperature is the one deliberate divergence: the reference averages the
+    two, we take the hotter. An average hides the controller that is about to
+    derate behind the one that is fine, and the hot one is the one that will
+    decide how the rest of the ride goes.
+    """
+    if not other:
+        return primary
+    out = dict(primary)
+    for k in ("avg_input_current", "amp_hours", "amp_hours_charged",
+              "watt_hours", "watt_hours_charged"):
+        out[k] = primary[k] + other[k]
+    for k in ("avg_motor_current", "duty", "rpm"):
+        out[k] = (primary[k] + other[k]) / 2.0
+    for k in ("temp_fet_filtered", "temp_motor_filtered"):
+        out[k] = max(primary[k], other[k])
+    out["fault"] = primary["fault"] or other["fault"]
+    out["esc_count"] = 2
     return out
 
 

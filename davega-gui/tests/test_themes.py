@@ -19,19 +19,25 @@ sys.path.insert(0, ROOT)
 from harness.display import Display, OutOfBounds       # noqa: E402
 from harness.telemetry import Board                    # noqa: E402
 from screens.riding import Riding                      # noqa: E402
-from screens.themes import THEMES, LIGHT, DEFAULT, get  # noqa: E402
+from screens.themes import THEMES, DEFAULT, get, light_theme  # noqa: E402
+
+# The light variants are built on demand on the device, to keep ten of them
+# off a small heap. The tests want them all, so they ask for them all.
+LIGHT = dict((k, light_theme(k)) for k in THEMES)
 from screens.palette import (contrast, separation, separation_cb,  # noqa: E402
                              MIN_PRIMARY, MIN_LABEL, MIN_SEPARATION,
-                             MIN_SEPARATION_CB)
+                             MIN_SEPARATION_CB, MIN_TRACK, MIN_LIT)
 
-MOCKUPS = os.path.join(ROOT, "mockups", "themes.html")
+MOCKUPS = os.path.join(ROOT, "mockups", "index.html")
 THEMES_PY = os.path.join(ROOT, "screens", "themes.py")
 # The Nazare layout paints a rail, a flow meter and fourteen battery segments
 # on top of a full erase, so a first paint touches a little over the frame
 # area. Pixels are the cheap part on this hardware - the ms budgets in
 # test_ui.py are the ones that bite.
-BUDGET_FULL = 1.60
-BUDGET_STEADY = 0.15
+#: A full repaint is allowed to be slow - it happens on a theme change and a
+#: wake, not while riding. A settled frame is what runs at 8 fps.
+FULL_MS = 900
+SETTLED_MS = 120
 
 def settle(screen, d, frame, board, limit=40):
     """Render until nothing is mid-animation.
@@ -92,18 +98,25 @@ def main():
 
     print()
     print("== drawing budget, per theme")
+    # In milliseconds, not pixels. Once a layout composes a curve into a band
+    # and pushes it with writeblock, pixels stop being the cost: a 9,600 px
+    # band is 12 ms and a single fill_rectangle of nine pixels is 2.9. Time is
+    # what the rider feels.
     for key in sorted(THEMES):
         d, screen = Display(), Riding(key)
-        screen.render(d, board.nominal(), board)
-        first = d.px_written
-        d.px_written = 0
-        screen.render(d, board.frame(**dict(board.nominal(),
-                                            rpm=board.erpm_for_kph(26.0))), board)
-        steady = d.px_written
-        ok = (first <= d.full_frame_px * BUDGET_FULL
-              and steady <= d.full_frame_px * BUDGET_STEADY)
-        check("budget/%-11s first %.2fx  steady %.3fx"
-              % (key, first / d.full_frame_px, steady / d.full_frame_px), ok)
+        screen.render(d, board.nominal(), board, full=True)
+        for _ in range(20):
+            screen.render(d, board.nominal(), board)
+            if screen.settled():
+                break
+        first = d.est_ms
+        d2 = Display()
+        screen.render(d2, board.frame(**dict(board.nominal(),
+                                             rpm=board.erpm_for_kph(26.0))),
+                      board)
+        ok = first <= FULL_MS and d2.est_ms <= SETTLED_MS
+        check("budget/%-11s first %4.0f ms  steady %5.1f ms"
+              % (key, first, d2.est_ms), ok)
 
     print()
     print("== contrast: a dash is read in sunlight, at speed, while vibrating")
@@ -136,6 +149,20 @@ def main():
         ok = wd >= MIN_SEPARATION and cb >= MIN_SEPARATION_CB and ia >= 12
         check("semantic/%-11s warn~danger %.0f (cb %.0f)  accent~ink %.0f"
               % (key, wd, cb, ia), ok)
+
+    print()
+    print("== a gauge shows where it ends, not just how far it has come")
+    # The unlit segments are the reading. A battery bar whose empty end is
+    # invisible in sunlight tells you a third is left by looking exactly like
+    # a bar a third as long floating in the dark.
+    for name, group in (("dark", THEMES), ("light", LIGHT)):
+        for key in sorted(group):
+            t = group[key]
+            tg = contrast(t.track, t.ground)
+            lit = contrast(t.accent, t.track)
+            check("track/%-5s %-11s %.2f on ground, accent %.1f over it"
+                  % (name, key, tg, lit),
+                  tg >= MIN_TRACK and lit >= MIN_LIT)
 
     print()
     print("== the light variants clear contrast and normal-vision separation")

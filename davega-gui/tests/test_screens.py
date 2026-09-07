@@ -50,8 +50,13 @@ ANIMATION_MS = 110
 # repaint is allowed to be expensive; a steady-state frame, where usually one
 # digit moved, is not. 8% of the frame is generous and still ~14x cheaper than
 # repainting.
-FULL_REPAINT_MAX = 1.30          # x frame area - erase plus content over it
-STEADY_STATE_MAX = 0.15          # x frame area - a ratchet, tighten as it improves
+# Both raised when the numeral grew to fill its half of the panel. Pixels are
+# nearly free on this bus - at 40 MHz and 2 bytes a pixel a steady frame of
+# 0.22x is ~6 ms of bus time - so these stay as ratchets against a region
+# quietly repainting the whole screen, while FULL_MS/SETTLED_MS below hold the
+# cost that actually bites: draw calls and characters.
+FULL_REPAINT_MAX = 1.50          # x frame area - erase plus content over it
+STEADY_STATE_MAX = 0.22          # x frame area - a ratchet, tighten as it improves
 
 # An animating frame redraws more than a settled one: a sweeping value can move
 # several digits at once. Still bounded, and the bound is what stops an

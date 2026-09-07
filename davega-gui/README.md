@@ -120,9 +120,12 @@ pixel-identical to a static render of its end value.
 
 ## Themes
 
-Ten themes, each a palette plus a layout name — `screens/themes.py`. Mockups of
-all ten at true device size are in [mockups/themes.html](mockups/themes.html);
-open it in a browser.
+Ten themes, each a palette plus a layout name — `screens/themes.py`. Every
+screen in every theme, day and night, at true device size, is in
+[mockups/index.html](mockups/index.html) — `make mockups` regenerates it from
+the code the device runs. All ten are selectable from the display's own menu;
+the list comes from the registry, so a theme added to `themes.py` shows up
+there without a second edit.
 
 ```sh
 make davega-theme THEME=nazare    # writes /data/config.json on the display

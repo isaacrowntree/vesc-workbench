@@ -48,6 +48,10 @@ class DeviceDisplay:
     def pixel(self, x, y, color=None):
         self.fill_rectangle(x, y, 1, 1, color)
 
+    def writeblock(self, x0, y0, x1, y1, buf):
+        """One prepared block, one transfer. What `bands` is built on."""
+        self.raw.writeblock(x0, y0, x1, y1, buf)
+
     def print(self, text, scale=1, numeric=None):
         text = str(text)
         if numeric is None:

@@ -119,7 +119,8 @@ class Display:
     def est_ms(self):
         """Estimated frame time on the device, from measured constants."""
         drawing = sum(1 for n, _ in self.calls
-                      if n in ("fill_rectangle", "print", "chars", "pixel", "erase"))
+                      if n in ("fill_rectangle", "print", "chars", "pixel",
+                               "erase", "writeblock"))
         return (drawing * self.CALL_MS
                 + self.px_written * self.PX_MS
                 + self.chars_written * self.CHAR_MS)
@@ -129,7 +130,8 @@ class Display:
         """2 bytes per pixel, plus ~11 bytes of column/page/write commands for
         each addressed window."""
         windows = sum(1 for n, _ in self.calls
-                      if n in ("fill_rectangle", "print", "chars", "pixel", "erase"))
+                      if n in ("fill_rectangle", "print", "chars", "pixel",
+                               "erase", "writeblock"))
         return self.px_written * 2 + windows * 11
 
     @property
@@ -173,6 +175,34 @@ class Display:
         self._bounds(x, y, w, h, "fill_rectangle")
         self._blit(x, y, w, h, self.color if color is None else color)
 
+    def writeblock(self, x0, y0, x1, y1, buf):
+        """One transfer of a prepared RGB565 block - the only way a curve gets
+        onto this panel without paying a draw call per run.
+
+        Measured at 12 ms for a 240x40 band (9,600 px), so about 1.25 us a
+        pixel against 2.9 ms for a `fill_rectangle` of any size. That is the
+        whole reason the dial and the rings are possible.
+        """
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        self._record("writeblock", x=x0, y=y0, w=w, h=h)
+        self._bounds(x0, y0, w, h, "writeblock")
+        self.px_written += w * h
+        for yy in range(h):
+            ty = y0 + yy
+            if ty < 0 or ty >= self.height:
+                continue
+            for xx in range(w):
+                tx = x0 + xx
+                if tx < 0 or tx >= self.width:
+                    continue
+                i = (yy * w + xx) * 2
+                c = (buf[i] << 8) | buf[i + 1]
+                r, g, b = rgb565_to_rgb(c)
+                o = (ty * self.width + tx) * 3
+                self.pixels[o] = r
+                self.pixels[o + 1] = g
+                self.pixels[o + 2] = b
+
     def pixel(self, x, y, color=None):
         self._record("pixel", x=x, y=y, color=color)
         self._bounds(x, y, 1, 1, "pixel")
@@ -180,14 +210,24 @@ class Display:
 
     def print(self, text, scale=1, numeric=None):
         """Draw at the current position. Glyphs are solid blocks: the harness
-        tests layout and overflow, not letterforms."""
+        tests layout and overflow, not letterforms.
+
+        The cell is filled with the background colour first, because that is
+        what the panel does - the font is opaque, and a label drawn over a
+        gauge punches a background-coloured box through it. Modelling the
+        glyph without its background made every such hole invisible here and
+        obvious on the glass, which is the one thing this harness exists to
+        prevent.
+        """
         text = str(text)
-        self._record("print", text=text, scale=scale, pos=self.pos)
+        self._record("print", text=text, scale=scale, pos=self.pos,
+                     bg=self.bg)
         x, y = self.pos
         cw, h = glyph_size(text, scale, numeric)
         w = len(text) * cw
         self._bounds(x, y, w, h, "print(%r)" % text[:24])
         self.chars_written += sum(1 for c in text if c != " ")
+        self._blit(x, y, w, h, self.bg)
         for i, ch in enumerate(text):
             if ch != " ":
                 self._blit(x + i * cw, y, cw - scale, h, self.color)

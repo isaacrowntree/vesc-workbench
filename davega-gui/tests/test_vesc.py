@@ -129,15 +129,42 @@ def main():
     check("and it parses", vesc.parse(out) is not None)
 
     print()
-    print("== pack current scales with the number of ESCs")
-    # Each ESC reports only its own draw. The reference firmware multiplies by
-    # VESC_COUNT; without it a dual board under-reports the pack by half.
+    print("== reading the second controller over CAN, and the fallback")
+    # Each ESC reports only its own draw - proven on the bench, where 123 and
+    # 124 answered with different temperatures and different tachometers. The
+    # right answer is to ask both and add; esc_count is what to do when the
+    # second one does not reply.
     one = vesc.parse(build(avg_input_current=9.5), esc_count=1)
     two = vesc.parse(build(avg_input_current=9.5), esc_count=2)
     check("single esc unchanged", abs(one["avg_input_current"] - 9.5) < 0.02)
     check("dual esc doubles", abs(two["avg_input_current"] - 19.0) < 0.02)
-    check("motor current is per-motor, not scaled",
-          abs(vesc.parse(build(avg_motor_current=18.0), esc_count=2)["avg_motor_current"] - 18.0) < 0.02)
+    check("motor current stays per-motor, as in the reference",
+          abs(vesc.parse(build(avg_motor_current=18.0),
+                         esc_count=2)["avg_motor_current"] - 18.0) < 0.05)
+
+    a = vesc.parse(build(avg_motor_current=18.0, avg_input_current=9.5,
+                         amp_hours=1.5, temp_fet_filtered=40.0, rpm=1000))
+    b = vesc.parse(build(avg_motor_current=14.0, avg_input_current=7.5,
+                         amp_hours=1.2, temp_fet_filtered=52.0, rpm=990))
+    both = vesc.combine(a, b)
+    check("pack current adds", abs(both["avg_input_current"] - 17.0) < 0.05)
+    check("motor current averages", abs(both["avg_motor_current"] - 16.0) < 0.05)
+    check("energy adds", abs(both["amp_hours"] - 2.7) < 0.01)
+    check("the hotter controller is the one reported",
+          abs(both["temp_fet_filtered"] - 52.0) < 0.05)
+    check("distance is not counted twice",
+          both["tachometer"] == a["tachometer"])
+    check("combine survives a missing partner",
+          vesc.combine(a, None) is a)
+
+    print()
+    print("== energy counters come off the wire at 1e4")
+    # Read at 10 they were a thousand times too large, which is why range had
+    # nothing sane to divide by: a 0.5 Ah trip looked like 500 Ah.
+    e = vesc.parse(build(amp_hours=1.5, watt_hours=63.2))
+    check("amp hours", abs(e["amp_hours"] - 1.5) < 0.001)
+    check("watt hours are read, not zeroed",
+          abs(e["watt_hours"] - 63.2) < 0.01)
 
     print()
     print("== a uart with no any() still works")
@@ -160,9 +187,19 @@ def main():
     check("reads the frame without any()", vesc.parse(out) is not None)
 
     print()
-    print("== a Unity reply is a different shape, and we know it")
-    check("unity pair table present", len(vesc.UNITY_PAIRS) == 5)
-    check("unity motor current is a pair", vesc.UNITY_PAIRS[2][1] == (11, 15))
+    print("== asking the other controller on the CAN bus")
+    # Proven on the bench: 123 answered over the wire and 124 through it, with
+    # different temperatures, different tachometers and their own controller
+    # ids in the reply. The standard packet carries one controller, not two.
+    req = vesc.can_request(124)
+    check("it is a framed COMM_FORWARD_CAN",
+          req[0] == vesc.START_SHORT and req[-1] == vesc.STOP
+          and req[2] == vesc.COMM_FORWARD_CAN)
+    check("addressed to the right controller, asking for values",
+          req[3] == 124 and req[4] == vesc.COMM_GET_VALUES)
+    body = req[2:2 + req[1]]
+    check("crc covers the payload",
+          ((req[-3] << 8) | req[-2]) == vesc.crc16(body))
 
     print()
     if fails:

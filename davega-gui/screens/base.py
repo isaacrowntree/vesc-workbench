@@ -55,6 +55,9 @@ class RegionScreen:
     def __init__(self, theme=None, siblings=(), position=0):
         self._drawn = {}
         self._colours = {}
+        #: regions something else has painted over, which must redraw whether
+        #: or not their value changed
+        self._force = set()
         self.t = get_theme(theme)
         self.siblings = siblings
         self.position = position
@@ -87,6 +90,10 @@ class RegionScreen:
         d.set_pos(MARGIN, 6)
         d.print(self.title or "")
         d.fill_rectangle(MARGIN, HEADER_H - 4, W - 2 * MARGIN, 1, self.t.track)
+
+    #: A screen may take the footer strip for itself. Declared, so the tests
+    #: read intent rather than inferring it from an absent row of dots.
+    shows_page_dots = True
 
     def footer(self, d):
         """Page dots: which of the set you are on, so the screens read as a
@@ -123,7 +130,11 @@ class RegionScreen:
         d.set_pos(x, y)
         d.print(s)
 
-    def value_painter(self, key, x, y, scale=2, color=None):
+    def value_painter(self, key, x, y, scale=2, color=None, bg=None):
+        """A text value. `bg` is what it clears to - which is the ground
+        unless the text sits on furniture, in which case clearing to the
+        ground punches a hole in the furniture on the differential path and
+        not on the full one, and the two stop agreeing."""
         def paint(d, f, b, v):
             col = color(f, b, self.t) if color else self.t.ink
             # Regions are diffed on their text, so a value whose colour
@@ -136,8 +147,11 @@ class RegionScreen:
             # wherever the new value has a space.
             forced = self._colours.get(key) != col
             self._colours[key] = col
+            back = self.t.ground if bg is None else bg
+            forced = forced or key in self._force
+            self._force.discard(key)
             widgets.text(d, x, y, self._drawn.get(key), v, scale=scale,
-                         color=col, bg=self.t.ground, force=forced)
+                         color=col, bg=back, force=forced)
         return paint
 
     def cell(self, key, x, y, label):
@@ -177,11 +191,13 @@ class RegionScreen:
             d.erase()
             self._drawn = {}
             self._colours = {}
+            self._force = set()
             self.on_full(f, b)
             self.chrome(d)
         for key, x, y, w, h, value_of, paint in self.regions():
             v = value_of(f, b)
-            if not full and self._drawn.get(key, _MISSING) == v:
+            if (not full and key not in self._force
+                    and self._drawn.get(key, _MISSING) == v):
                 continue
             if full:
                 self._drawn.pop(key, None)

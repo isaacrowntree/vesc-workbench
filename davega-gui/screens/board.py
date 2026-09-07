@@ -43,7 +43,8 @@ class Board:
                  cell_full=4.2, cell_nominal=3.6, cell_empty=3.0,
                  motor_current=80.0, battery_current=30.0, regen_current=-8.0,
                  pole_pairs=7, gear_ratio=4.2, wheel_m=0.2,
-                 temp_derate_start=85.0, temp_derate_end=100.0, usable=0.8):
+                 temp_derate_start=85.0, temp_derate_end=100.0, usable=0.8,
+                 wh_per_km=18.0):
         self.cells = cells
         self.parallel = parallel
         self.cell_ah = cell_ah
@@ -57,6 +58,10 @@ class Board:
         self.gear_ratio = gear_ratio
         self.wheel_m = wheel_m
         self.usable = usable
+        #: What a kilometre costs before this board has measured one. A range
+        #: that waits for evidence shows nothing on a board that has just been
+        #: switched on, which is exactly when a rider wants to know.
+        self.wh_per_km = wh_per_km
         self.temp_derate_start = temp_derate_start
         self.temp_derate_end = temp_derate_end
 
