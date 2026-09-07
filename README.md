@@ -165,15 +165,16 @@ host-side stand-in for the panel, saved as the pixels it produced — which is
 also how the tests work:
 
 ```sh
-make gui-test      # 390 checks, no hardware
+make gui-test      # 642 checks, no hardware
+make test-device   # the whole dashboard in real MicroPython, in docker
 make mockups       # every screen x every theme x day/night, to HTML
 ```
 
 The panel has `fill_rectangle`, `pixel` and `writeblock` and no line, circle or
 polygon, and on the device a draw call costs **2.9 ms whatever its size**. So an
 arc drawn a rectangle per column costs 481 ms — four times the budget for a
-whole frame — and the curves are instead composed into a buffer and pushed in
-one transfer at 12 ms a band. See [davega/README.md](davega/README.md)
+whole frame — and the curves are instead composed into a buffer and pushed a
+band at a time, about 6 ms for 240×20 pixels. See [davega/README.md](davega/README.md)
 for the design, and [docs/theme-layouts.md](docs/theme-layouts.md) for what the
 hardware will and will not do.
 
@@ -195,7 +196,7 @@ davega/    code that runs ON the display (and the tools that build it)
   gui/       ships verbatim to /gui - the same package name on both sides
   start.py   ships to /start.py; the escape hatch
   harness/   a host-side stand-in for the panel, so tests need no hardware
-  tests/     390 checks
+  tests/     642 checks, and device/ runs the lot in real MicroPython
   tools/     WebREPL client, mockup and screenshot generators
 ```
 
