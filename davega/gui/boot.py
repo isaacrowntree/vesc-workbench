@@ -44,6 +44,12 @@ def main():
     # heap is small and still fragments, and a collect between imports costs
     # nothing. It was the difference between booting and handing the screen
     # back when these were source.
+    # The band buffer, claimed here rather than at the first curve. This is
+    # the cleanest the heap will ever be, and ten kilobytes is hard to find
+    # once the display and a layout are in place.
+    import gui.bands as bands
+    bands.reserve()
+
     import gui.device as device
     gc.collect()
     import gui.input as user_input
@@ -135,7 +141,22 @@ def main():
     # and writing every frame would wear the flash for nothing.
     last_save = utime.ticks_ms()
     while True:
-        runner.step()
+        try:
+            runner.step()
+        except MemoryError:
+            # A theme too heavy for what is left of the heap must not take the
+            # dashboard down with it. The rider gets the default arrangement,
+            # which is the lightest, and the choice is written back so the
+            # next boot does not try the same thing again and fail the same
+            # way. A dead screen on a deck is worse than the wrong colours.
+            print("boot: out of memory on %s, falling back to %s"
+                  % (app.theme, DEFAULT))
+            import gc
+            gc.collect()
+            app.set_theme(DEFAULT)
+            _write_config(theme=DEFAULT)
+            gc.collect()
+            continue
         if utime.ticks_diff(utime.ticks_ms(), last_save) > SAVE_EVERY_MS:
             lifetime.merge(session)
             session.reset()

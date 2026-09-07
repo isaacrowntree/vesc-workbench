@@ -34,22 +34,53 @@ promise something the panel will not draw.
 MAX_ROWS = 20
 MAX_W = 240
 
+#: Fallbacks, largest first. A shorter band costs one more transfer - a few
+#: milliseconds on a full repaint, and none at all on a settled frame - and
+#: asks for a block that is much easier to find on a heap in pieces.
+ROW_CHOICES = (20, 12, 8, 4)
+
 _scratch = None
+_rows = 0
+
+
+def reserve():
+    """Claim the band buffer now, while the heap is still whole.
+
+    Called from `boot` before any screen is built. Claiming it lazily, at the
+    first curve drawn, meant asking for ten kilobytes at the worst possible
+    moment - after the display, the screens and a layout were already placed -
+    and being refused. The dashboard then handed the screen back to the stock
+    app, which looks to the rider like the board never started.
+
+    Takes the largest band it can get and degrades rather than failing.
+    Returns the number of rows it managed, or 0 if even the smallest was
+    refused - in which case `paint` falls back to allocating per call, which
+    is what it used to do and is better than not drawing.
+    """
+    global _scratch, _rows
+    if _scratch is not None:
+        return _rows
+    try:
+        import gc
+        gc.collect()
+    except ImportError:
+        pass
+    for rows in ROW_CHOICES:
+        try:
+            _scratch = bytearray(MAX_W * rows * 2)
+            _rows = rows
+            return rows
+        except MemoryError:
+            continue
+    return 0
 
 
 def _band_buffer(need):
-    """One buffer for every band this session will ever draw.
-
-    Claimed on first use at its full size, so the allocation happens once,
-    early, rather than repeatedly at whatever moment the rider changes theme.
-    """
-    global _scratch
+    """A slice of the reserved buffer, or a one-off if it will not fit."""
     if _scratch is None:
-        import gc
-        gc.collect()
-        _scratch = bytearray(MAX_W * MAX_ROWS * 2)
-    if need > len(_scratch):                  # a caller asking for more
-        return bytearray(need)                # than we reserved: one-off
+        reserve()
+    if _scratch is None or need > len(_scratch):
+        return bytearray(need)
     return memoryview(_scratch)[:need]
 
 
@@ -286,13 +317,15 @@ def _isqrt(n):
     return x
 
 
-def paint(d, x, y, w, h, draw, rows=MAX_ROWS):
+def paint(d, x, y, w, h, draw, rows=None):
     """Compose `draw(canvas)` into bands and push each one.
 
     One buffer, reused down the region, because the whole picture will not fit
     in RAM. `draw` is called once per band with the same absolute coordinates
     every time and is expected to be a pure function of them.
     """
+    if rows is None:
+        rows = _rows or reserve() or MAX_ROWS
     rows = min(rows, h)
     top = y
     while top < y + h:
