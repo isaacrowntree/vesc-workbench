@@ -20,6 +20,7 @@ from harness.display import Display, OutOfBounds       # noqa: E402
 from harness.telemetry import Board                    # noqa: E402
 from gui.riding import Riding                      # noqa: E402
 from gui.themes import THEMES, DEFAULT, get, light_theme  # noqa: E402
+from gui import themes as themes_module                       # noqa: E402
 
 # The light variants are built on demand on the device, to keep ten of them
 # off a small heap. The tests want them all, so they ask for them all.
@@ -196,8 +197,22 @@ def main():
     check("every light ground is lighter than its dark one",
           all(contrast(LIGHT[k].ground, 0x0000) > contrast(THEMES[k].ground, 0x0000)
               for k in THEMES))
+    lit = get("rosso", True)
     check("get(key, light=True) returns the light one",
-          get("rosso", True) is LIGHT["rosso"] and get("rosso") is THEMES["rosso"])
+          lit.light and lit.ground == LIGHT["rosso"].ground
+          and get("rosso") is THEMES["rosso"])
+    check('the "@light" suffix means the same thing',
+          get("rosso@light").ground == lit.ground)
+
+    # Derived on demand and only one kept. A rider looks at one theme; caching
+    # the other nine caches nothing anybody is looking at, and on the board
+    # cycling the themes in day mode ran it out of memory where night mode
+    # survived.
+    for k in sorted(THEMES):
+        get(k, True)
+    check("only the light variant in use is cached (%d held)"
+          % len(themes_module.LIGHT), len(themes_module.LIGHT) == 1,
+          "holding %d" % len(themes_module.LIGHT))
 
     print()
     print("== the mockups show the colours the device draws")

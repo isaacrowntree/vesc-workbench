@@ -22,9 +22,35 @@ gets a pure-Python stand-in with the same primitives, so a mockup cannot
 promise something the panel will not draw.
 """
 
-#: Tallest band we will allocate: 240 x 40 x 2 bytes is 19 kB, which left
-#: 77 kB free on the board. Twice that failed outright.
-MAX_ROWS = 40
+#: Tallest band we compose at once. 240 x 20 x 2 is 9.6 kB.
+#:
+#: This was 40 rows, and 19 kB of it - which allocated fine on a clean heap
+#: and then failed on a theme change, when the old theme's screens had been
+#: freed and the heap was in pieces. Halving it costs one extra transfer for a
+#: tall region, about three milliseconds, and buys a block half as hard to
+#: find. The buffer is also allocated once and reused rather than claimed and
+#: dropped on every paint: asking for 19 kB, releasing it, and asking again a
+#: frame later is how a 98 kB heap gets fragmented in the first place.
+MAX_ROWS = 20
+MAX_W = 240
+
+_scratch = None
+
+
+def _band_buffer(need):
+    """One buffer for every band this session will ever draw.
+
+    Claimed on first use at its full size, so the allocation happens once,
+    early, rather than repeatedly at whatever moment the rider changes theme.
+    """
+    global _scratch
+    if _scratch is None:
+        import gc
+        gc.collect()
+        _scratch = bytearray(MAX_W * MAX_ROWS * 2)
+    if need > len(_scratch):                  # a caller asking for more
+        return bytearray(need)                # than we reserved: one-off
+    return memoryview(_scratch)[:need]
 
 
 class _PyFrame:
@@ -268,14 +294,11 @@ def paint(d, x, y, w, h, draw, rows=MAX_ROWS):
     every time and is expected to be a pure function of them.
     """
     rows = min(rows, h)
-    buf = bytearray(w * rows * 2)
-    fb = _frame(buf, w, rows)
     top = y
     while top < y + h:
         tall = min(rows, y + h - top)
-        if tall != rows:                      # last band, short
-            buf = bytearray(w * tall * 2)
-            fb = _frame(buf, w, tall)
+        buf = _band_buffer(w * tall * 2)
+        fb = _frame(buf, w, tall)
         draw(Canvas(fb, x, top, w, tall))
         d.writeblock(x, top, x + w - 1, top + tall - 1, buf)
         top += tall

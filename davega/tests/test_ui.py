@@ -240,7 +240,13 @@ def main():
     check("returning from the menu repaints fully", len(d.calls) > 20)
 
     app.set_theme("rosso")
-    check("theme change drops cached screens", app._live == {})
+    # The old screens are gone; the new one is built eagerly, because
+    # `set_theme` has to find out *now* whether the new layout fits so it can
+    # roll back while there is still something to roll back to.
+    check("theme change drops the old cached screens",
+          all(s.t.key == "rosso" for s in app._live.values()),
+          "held %s" % sorted(app._live))
+    check("and the new theme is the one in use", app.screen().t.key == "rosso")
     d = Display()
     app.render(d, b.nominal())
     check("renders in the new theme", len(d.calls) > 0)

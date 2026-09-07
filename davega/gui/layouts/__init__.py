@@ -16,10 +16,35 @@ DEFAULT = "flagship"
 
 
 def load(name):
-    """The Layout class for a layout name, imported on demand."""
+    """The Layout class for a layout name, imported on demand.
+
+    Any other layout already resident is dropped first, and dropping one takes
+    two steps rather than the obvious one. Removing it from `sys.modules` is
+    not enough: importing `gui.layouts.dial` also binds `dial` as an attribute
+    of this package, and that reference keeps the whole module alive. Every
+    theme a rider tried stayed in memory, about nine kilobytes each, until the
+    board ran out - which looked like the dashboard dying on a theme change
+    and handing the screen back to the stock app.
+    """
     if name not in NAMES:
         name = DEFAULT
     pkg = __name__                      # gui.layouts, host or device
+    keep = (pkg, pkg + ".kit", pkg + "." + name)
+    import sys
+    me = sys.modules[pkg]
+    for other in NAMES:
+        if other == name:
+            continue
+        if (pkg + "." + other) in sys.modules:
+            del sys.modules[pkg + "." + other]
+        if hasattr(me, other):
+            delattr(me, other)          # the reference that actually held it
+    try:
+        import gc
+        gc.collect()
+    except ImportError:                 # not every host has it
+        pass
+
     mod = __import__(pkg + "." + name, None, None, (name,))
     if not hasattr(mod, "Layout"):      # MicroPython hands back the package
         mod = getattr(mod, name)

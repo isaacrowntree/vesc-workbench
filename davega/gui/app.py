@@ -142,12 +142,34 @@ class App:
 
     def set_theme(self, theme):
         """Switching theme invalidates every cached screen: their colours and
-        their record of what is on the glass are both wrong now."""
+        their record of what is on the glass are both wrong now.
+
+        Rolls back if the new one will not fit. A theme change is the moment
+        the heap is at its worst - the old screens have just been dropped, the
+        old layout unloaded, and a new layout and its band buffer are about to
+        be claimed out of whatever that left behind. Running out there used to
+        take the whole dashboard down and hand the screen back to the stock
+        app, which is a bad trade for a cosmetic setting.
+        """
+        was = self.theme
         self.theme = theme
         self._live = {}
+        try:
+            self.screen()                   # build it now, while we can undo
+        except MemoryError:
+            self.theme = was
+            self._live = {}
+            try:
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
+            self._dirty = True
+            return False
         if self._splash:
             self._splash = Splash(self._theme_key(), self.name)
         self._dirty = True
+        return True
 
     # -- the loop ---------------------------------------------------------
 

@@ -374,6 +374,78 @@ check("it recovers when the ESC comes back", not runner.stale)
 # ---------------------------------------------------------------- memory
 
 print()
+print("== the two things that killed it on a theme change")
+# Both of these passed on this host before they were fixed, because the unix
+# port's heap is twenty times the board's. They are asserted as *invariants*
+# rather than as byte counts, which is what does carry across.
+
+# 1. One layout resident at a time. Changing theme used to leave the old
+#    arrangement in memory beside the new one.
+import gui.layouts as layouts                             # noqa: E402
+for key in ("rosso", "toro", "hybrid", "papaya", "nazare"):
+    Riding(key)
+resident = sorted(m.split(".")[-1] for m in sys.modules
+                  if m.startswith("gui.layouts.") and not m.endswith(".kit"))
+check("one layout resident after five theme changes (%s)"
+      % ",".join(resident), len(resident) == 1, repr(resident))
+
+# 2. The band buffer is claimed once and reused. Asking for 19 kB, releasing
+#    it and asking again a frame later is how a small heap gets fragmented,
+#    and it failed on the board at exactly the moment the heap was worst.
+from gui import bands                                      # noqa: E402
+
+
+class _Sink:
+    def writeblock(self, *a):
+        pass
+
+
+def _blank(c):
+    c.fill(0)
+
+
+bands.paint(_Sink(), 0, 0, 240, 40, _blank)               # prime it
+gc.collect()
+before = gc.mem_free()
+for _ in range(40):
+    bands.paint(_Sink(), 0, 0, 240, 40, _blank)
+gc.collect()
+grew = before - gc.mem_free()
+check("forty band paints allocate nothing (%+d bytes)" % -grew, grew <= 0,
+      "%d bytes over 40 paints" % grew)
+check("and the band buffer is bounded (%d bytes)"
+      % (bands.MAX_W * bands.MAX_ROWS * 2),
+      bands.MAX_W * bands.MAX_ROWS * 2 <= 10240)
+
+# 3. A theme that has been left behind is really gone. Removing it from
+#    sys.modules is not enough - importing gui.layouts.dial also binds `dial`
+#    as an attribute of the package, and that reference held the whole module
+#    alive. Every theme the rider had tried stayed in memory.
+bound = sorted(a for a in dir(layouts) if a in layouts.NAMES)
+check("no layout is left bound to its package (%s)"
+      % (",".join(bound) or "none"), len(bound) <= 1, repr(bound))
+
+# 4. And the screens themselves return their memory. The display's recorder is
+#    reset first: it is the instrument, and a log of eighty calls a render is
+#    tens of kilobytes of measurement sitting inside the measurement.
+import frozen.display                                    # noqa: E402
+raw = frozen.display.DISPLAY
+warm = Riding(DEFAULT)
+warm.render(runner.d, runner.frame, board, full=True)
+raw.reset()
+gc.collect()
+floor2 = gc.mem_free()
+for _ in range(6):
+    warm.render(runner.d, runner.frame, board, full=True)
+    raw.reset()
+gc.collect()
+lost = floor2 - gc.mem_free()
+check("six full repaints allocate nothing lasting (%+d bytes)" % -lost,
+      lost <= 0, "lost %d bytes" % lost)
+del warm
+gc.collect()
+
+print()
 print("== memory")
 # Absolute byte counts do not carry from here to the board: this is the unix
 # port on a 64-bit host, where every reference is twice the width and the

@@ -22,15 +22,18 @@ class Display:
     are the cost - 2.9 ms each, whatever their size.
     """
 
-    #: The log is capped. A soak test runs hundreds of frames, and a recorder
-    #: that grows without limit runs the interpreter out of memory and then
-    #: reports it as though the dashboard had leaked.
-    MAX_CALLS = 1500
+    #: The log is a ring: fixed size, oldest overwritten. It was a capped
+    #: list, which stops growing but only after it has already claimed its
+    #: cap - and on a small heap that is tens of kilobytes of *instrument*
+    #: sitting in the middle of a measurement of the thing being instrumented.
+    #: Three separate "leaks" in this project turned out to be this recorder.
+    #: A ring cannot do it: it allocates once and never again.
+    MAX_CALLS = 512
 
     def __init__(self, width=240, height=320):
         self.width = width
         self.height = height
-        self.calls = []
+        self._ring = [None] * self.MAX_CALLS
         self.n_calls = 0
         self.px = bytearray(width * height * 2)
         self.fg = 0xFFFF
@@ -40,9 +43,16 @@ class Display:
 
     # what the driver offers, and nothing else
     def _log(self, *call):
+        self._ring[self.n_calls % self.MAX_CALLS] = call
         self.n_calls += 1
-        if len(self.calls) < self.MAX_CALLS:
-            self.calls.append(call)
+
+    @property
+    def calls(self):
+        """The calls since the last reset, oldest first."""
+        if self.n_calls <= self.MAX_CALLS:
+            return self._ring[:self.n_calls]
+        i = self.n_calls % self.MAX_CALLS
+        return self._ring[i:] + self._ring[:i]
 
     def erase(self):
         self._log("erase")
@@ -136,7 +146,8 @@ class Display:
         return n
 
     def reset(self):
-        self.calls = []
+        for i in range(self.MAX_CALLS):
+            self._ring[i] = None
         self.n_calls = 0
 
 

@@ -268,7 +268,10 @@ and packs get damaged. Run the detection wizard.
 | `COMM_FORWARD_CAN` to a second motor | ✅ verified on hardware — [findings](docs/findings.md#comm_forward_can-to-a-second-motor-works) |
 | Traction control | ✅ confirmed in motion, `tc_max_diff` 6000 on grass |
 | Hardware tested | FOCBOX Unity only |
-| DAVEGA X WebREPL scripts | ⚠️ written from the firmware images, never run on a device — [docs](docs/davega-x.md) |
+| DAVEGA X WebREPL scripts | ✅ run on the display — settings read and written, gearing corrected — [docs](docs/davega-x.md) |
+| Replacement dashboard | ✅ installed and running on the display, ten layouts, bytecode — [design](davega/README.md) |
+| Dashboard tested in the real interpreter | ✅ MicroPython 1.14 in Docker, end to end — [how](davega/tests/device/README.md) |
+| Tested in motion | ⚠️ **not yet.** Telemetry, CAN, range and the buttons are all verified on the bench and in the harness. The board has not been ridden since. |
 
 ## Safety
 

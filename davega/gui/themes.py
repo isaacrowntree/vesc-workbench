@@ -141,16 +141,22 @@ THEMES = {t.key: t for t in (
 
 DEFAULT = "nazare"
 
-#: Daylight variants, derived on demand and then remembered. Building all ten
-#: at import cost ten Theme objects and the arithmetic behind them on a board
-#: with 98 kB of heap, every boot, for a setting most riders never turn on -
-#: and it was the allocation that failed first when the heap was tight.
+#: Daylight variants, derived on demand and remembered - but only the one in
+#: use. Building all ten at import cost ten Theme objects and the arithmetic
+#: behind them on a board with 98 kB of heap, every boot, for a setting most
+#: riders never turn on. Keeping all ten that were ever asked for was the same
+#: mistake spread over time: cycling the themes in day mode left ten of them
+#: resident and ran the board out of memory where night mode survived.
+#:
+#: A rider looks at one theme. Caching the other nine caches nothing anybody
+#: is looking at.
 LIGHT = {}
 
 
 def light_theme(key):
     t = LIGHT.get(key)
     if t is None:
+        LIGHT.clear()
         t = LIGHT[key] = THEMES[key].as_light()
     return t
 
