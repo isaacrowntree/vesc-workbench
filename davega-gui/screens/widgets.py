@@ -24,7 +24,7 @@ def cell_size(text, scale):
     return CHAR_W * scale, CHAR_H * scale
 
 
-def text(d, x, y, old, new, scale=1, color=0xFFFF, bg=0x0000):
+def text(d, x, y, old, new, scale=1, color=0xFFFF, bg=0x0000, force=False):
     """Draw `new` at (x, y), given that `old` is already there.
 
     Returns `new`, so callers can store it as the new previous value.
@@ -36,7 +36,15 @@ def text(d, x, y, old, new, scale=1, color=0xFFFF, bg=0x0000):
     cw_new, ch_new = cell_size(new, scale)
     cw_old, ch_old = cell_size(old, scale) if old is not None else (cw_new, ch_new)
     cw, ch = max(cw_new, cw_old), max(ch_new, ch_old)
-    if old is None:                       # nothing known: draw the lot
+    # A value that switches between numeric and not switches font, and the
+    # two have different character pitch. Diffing per character across that
+    # boundary compares cells that are not in the same places, and leaves the
+    # old glyphs behind at the old spacing. Redraw the whole field instead.
+    if force or old is None or (cw_old, ch_old) != (cw_new, ch_new):
+        if old is not None:
+            d.set_color(bg, bg)
+            d.fill_rectangle(x, y, max(len(old) * cw_old, len(new) * cw_new),
+                             max(ch_old, ch_new), bg)
         d.set_color(color, bg)
         d.set_pos(x, y)
         d.print(new, scale=scale, numeric=numeric)

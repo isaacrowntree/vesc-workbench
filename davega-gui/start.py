@@ -11,6 +11,7 @@
 
 
 LIFETIME_PATH = "/data/gui-lifetime.json"
+ERROR_PATH = "/data/gui-error.txt"
 SAVE_EVERY_MS = 5 * 60 * 1000        # five minutes
 
 
@@ -33,25 +34,44 @@ def _write_json(path, obj):
 
 
 def _dash():
-    import gc
+    import gc, os
     from frozen.buttons import BUTTON_UP
+
+    # Last boot's failure, if there was one. Clearing it here means the file
+    # existing always describes the most recent attempt.
+    try:
+        os.remove(ERROR_PATH)
+    except Exception:                            # noqa: BLE001
+        pass
 
     # Held at boot: stand aside.
     if not BUTTON_UP.value():
         return False
 
+    # MicroPython compiles source to bytecode at import time and needs
+    # contiguous RAM to do it. Importing sixteen modules in one breath
+    # fragments the heap and the largest of them - panels - fails with a
+    # MemoryError while several tens of kilobytes are still free. Collecting
+    # between them costs nothing and is the difference between booting and
+    # handing the screen back.
     import gui.device as device
+    gc.collect()
     import gui.input as user_input
     import gui.vesc as vesc
+    gc.collect()
     from gui.board import Board
     from gui.app import App, Menu, MenuItem
+    gc.collect()
     from gui.riding import Riding
+    gc.collect()
     from gui.panels import (RangeScreen, OverviewScreen, SessionScreen,
                             LifetimeScreen)
+    gc.collect()
     from gui.runner import Runner
     from gui.session import Session, Resistance
     from machine import UART
     import utime
+    gc.collect()
 
     cfg = {}
     try:
@@ -149,5 +169,18 @@ def _write_config(key, value):
 try:
     _dash()
 except Exception as e:                           # noqa: BLE001
-    # A dash that fails should hand the screen back, not keep it.
+    # A dash that fails hands the screen back rather than keeping it - but
+    # silently handing it back tells the rider nothing and costs a WebREPL
+    # session to diagnose. Write the traceback somewhere it survives.
     print("start.py: falling through to the stock app: %r" % (e,))
+    try:
+        import sys
+        with open(ERROR_PATH, "w") as fh:
+            fh.write("%r\n" % (e,))
+            # A full traceback where the runtime offers one; the repr above
+            # is written first so the file is never empty if it does not.
+            printer = getattr(sys, "print_exception", None)
+            if printer is not None:
+                printer(e, fh)
+    except Exception:                            # noqa: BLE001
+        pass

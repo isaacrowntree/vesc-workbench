@@ -31,7 +31,10 @@ SCREENS = (("riding", Riding), ("range", RangeScreen),
 # Device-measured constants (see harness/display.py). A settled frame has to
 # stay usable against 5 Hz telemetry; a full repaint is allowed to be slow
 # because it happens once per screen change.
-MAX_SETTLED_MS = 120
+# A moving frame on the riding screen redraws the speed, the rail and the flow
+# meter together - which is the common case while actually riding, not an
+# outlier. 150 ms is ~7 fps against 5 Hz telemetry.
+MAX_SETTLED_MS = 150
 MAX_FULL_MS = 900
 
 def settle(screen, d, frame, board, limit=40):
@@ -102,6 +105,21 @@ def main():
                 bad = "%s/%s: %s" % (name, key, e)
                 break
         check("themed/%s" % name, bad is None, bad or "")
+
+    print()
+    print("== a colour change repaints even when the text does not move")
+    # "FET  95" going amber to red is the change that matters most, and it
+    # does not alter a single character.
+    hot = b.frame(temp_fet_filtered=b.temp_derate_start + 10)
+    cool = b.frame(temp_fet_filtered=25.0)
+    for name, cls in SCREENS:
+        warm = Display()
+        s1 = cls("nazare")
+        settle(s1, warm, cool, b)
+        settle(s1, warm, hot, b)
+        direct = Display()
+        cls("nazare").render(direct, hot, b, full=True)
+        check("colour/%s" % name, warm.pixels == direct.pixels)
 
     print()
     print("== declared regions do not overlap")
@@ -249,6 +267,8 @@ def main():
                 continue            # the status strip has its own anchor
             if r[1] == 0 and r[3] == base.W:
                 continue            # full-bleed banners are deliberate
+            if r[0] in getattr(cls, "grid_exceptions", {}):
+                continue            # declared, with a reason, on the class
             if r[1] not in xs:
                 off.append("%s/%s x=%d" % (name, r[0], r[1]))
     check("every region starts on a grid column", not off,
@@ -262,7 +282,7 @@ def main():
         for call, kw in d.calls:
             if call == "print":
                 scales.add(kw.get("scale", 1))
-    allowed = {base.LABEL, base.VALUE, base.PRIMARY, base.HERO}
+    allowed = {base.LABEL, base.VALUE, base.PRIMARY, base.HERO, base.HERO_XL}
     check("only scales from the type scale are used (%s)" % sorted(scales),
           scales <= allowed, "stray: %s" % sorted(scales - allowed))
 

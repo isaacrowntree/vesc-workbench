@@ -1,22 +1,34 @@
-"""Riding screen, drawn differentially.
+"""The riding screen: the Nazare layout.
 
-A full repaint of this layout pushes ~90k pixels - more than the whole frame,
-because erasing paints everything and then the content paints over it. At two
-bytes a pixel that is ~181 kB down the SPI bus for a screen where, between one
-frame and the next, usually a single digit changed.
+The design the mockups promised, drawn for real. Everything on it earns its
+place against the cost model - a character costs ~8.6 ms on this panel and a
+draw call ~2.7 ms, so a screen crowded with numbers is a screen that updates in
+lurches.
 
-So the screen is described as a set of *regions*, each with a value. Rendering
-compares each region's value against what was last drawn there and repaints
-only the ones that moved. `render()` still does a full repaint when asked, and
-the test suite asserts the two produce identical pixels - which is what makes
-the optimisation safe to trust.
+  * the speed rail up the left edge sweeps, so speed reads peripherally
+  * one dominant numeral, with no unit label competing with it
+  * power flow from a hard centre zero: regen left, drive right
+  * the battery segmented, with percentage and range beside it
+  * everything else grey until it matters
+
+Digits snap and gauges sweep, which is what every good dash does and also what
+this hardware can afford.
 """
-
 from . import widgets
 from .anim import Tweened
-from .base import (RegionScreen, W, H, MARGIN, HALF, col_x, row_y,
-                   BODY_TOP, HERO, VALUE)
+from .base import (RegionScreen, W, H, MARGIN, col_x, BODY_TOP, HERO_XL,
+                   VALUE, LABEL)
 
+# The rail and the hero numeral sit outside the two-column grid on purpose:
+# this screen is the one place where a peripheral gauge and a single dominant
+# number beat a tidy table.
+RAIL_X, RAIL_W = 8, 6
+RAIL_TOP, RAIL_BOT = 40, 268
+SPEED_X, SPEED_Y = 30, 52
+FLOW_Y, FLOW_H = 170, 14
+BATT_Y, BATT_H = 214, 14
+BIG_Y = 240
+FOOT_Y = 276
 
 
 def soc(board, volts, frame=None):
@@ -31,128 +43,161 @@ def soc(board, volts, frame=None):
     return board.soc_for_voltage(volts)
 
 
-def _speed(f, b):
-    return "%3d" % round(abs(b.kph_for_erpm(f.rpm)))
-
-
-def _bar_target(f, b):
-    return (W - 2 * MARGIN) * soc(b, f.input_voltage, f)
-
-
-def _volts(f, b):
-    return "%4.1fV  %3d%%" % (f.input_voltage,
-                             round(soc(b, f.input_voltage, f) * 100))
-
-
 class Riding(RegionScreen):
-    """Regions are (key, x, y, w, h, value_fn, draw_fn).
-
-    The battery bar sweeps; the numbers snap. Animating a gauge costs a
-    handful of pixels in one call, animating three large digits costs three
-    characters at ~8.6 ms each - and a tweened numeric readout reads like a
-    slot machine anyway.
-    """
-
     title = "RIDING"
 
+    #: regions that deliberately sit off the two-column grid, and why
+    grid_exceptions = {
+        "pct": "clear of the speed rail, which owns the left edge",
+        "fet": "clear of the speed rail",
+        "rail": "peripheral gauge, pinned to the edge",
+        "speed": "the hero numeral is centred on its own",
+        "kmh": "sits under the hero numeral",
+        "flow": "centre-zero meter spans the width",
+        "flow_a": "reads against the meter, right aligned",
+        "batt": "segmented bar spans the width",
+        "gear": "state block, top right",
+        "fault": "full-bleed banner",
+    }
+
     def __init__(self, theme=None, siblings=(), position=0):
-        # Declared before the region table is built, because a region closure
-        # captures it.
-        self._bar = Tweened(0.0, frames=6, snap=2.0)
+        self._rail = Tweened(0.0, frames=6, snap=3.0)
+        self._flow = Tweened(0.0, frames=5, snap=2.0)
         RegionScreen.__init__(self, theme, siblings, position)
 
     def on_full(self, f, b):
-        # Snap: a screen you have just switched to should show where the
-        # battery is, not sweep up to it from wherever the last one left off.
-        target = _bar_target(f, b)
-        self._bar.value = self._bar.target = target
-        self._bar._step = self._bar.frames
+        for tween, value in ((self._rail, self._rail_target(f, b)),
+                             (self._flow, self._flow_target(f, b))):
+            tween.value = tween.target = value
+            tween._step = tween.frames
+
+    def on_frame(self, f, b):
+        self._rail.set(self._rail_target(f, b)).advance()
+        self._flow.set(self._flow_target(f, b)).advance()
 
     def settled(self):
-        """True when nothing is mid-animation. A caller that renders only on
-        new telemetry uses this to know it still owes frames."""
-        return self._bar.settled
+        return self._rail.settled and self._flow.settled
 
-    # -- element painters --------------------------------------------------
+    # -- targets -----------------------------------------------------------
 
-    def _big_speed(self, d, f, b, v):
-        widgets.text(d, col_x(0), 24, self._drawn.get("speed"), v,
-                     scale=6, color=self.t.ink, bg=self.t.ground)
+    def _rail_target(self, f, b):
+        kph = abs(b.kph_for_erpm(f["rpm"]))
+        top = b.kph_for_erpm(b.erpm_for_kph(45.0))
+        return (RAIL_BOT - RAIL_TOP) * max(0.0, min(1.0, kph / top))
 
-    def _bar_value(self, f, b):
-        """Step the tween one frame and report where the bar should be now."""
-        self._bar.set(_bar_target(f, b))
-        return int(self._bar.advance())
+    def _flow_target(self, f, b):
+        span = (W - 2 * SPEED_X) / 2.0
+        frac = f["avg_motor_current"] / max(1.0, b.motor_current)
+        return span * max(-1.0, min(1.0, frac))
 
-    def _paint_bar(self, d, f, b, v):
-        bar_w = W - 2 * MARGIN
-        d.fill_rectangle(col_x(0), 96, bar_w, 18, self.t.track)
-        if v:
-            d.fill_rectangle(col_x(0), 96, v, 18, self.t.soc_color(v / bar_w))
+    # -- chrome ------------------------------------------------------------
 
-    def _volts_line(self, d, f, b, v):
-        widgets.text(d, col_x(0), 120, self._drawn.get("volts"), v,
-                     color=self.t.ink, bg=self.t.ground)
+    def chrome(self, d):
+        RegionScreen.chrome(self, d)
+        t = self.t
+        # rail track and its quarter ticks
+        d.fill_rectangle(RAIL_X, RAIL_TOP, RAIL_W, RAIL_BOT - RAIL_TOP, t.track)
+        for i in range(5):
+            y = RAIL_TOP + (RAIL_BOT - RAIL_TOP) * i // 4
+            d.fill_rectangle(RAIL_X - 3, y, RAIL_W + 6, 1, t.dim)
+        d.set_color(t.dim, t.ground)
+        d.set_pos(SPEED_X + 2, SPEED_Y + 62)
+        d.print("KM/H")
+        d.set_pos(SPEED_X, FLOW_Y - 12)
+        d.print("REGEN")
+        d.set_pos(W - SPEED_X - 40, FLOW_Y - 12)
+        d.print("DRIVE")
 
-    def _cell(self, key, x, y, color=None):
-        """The label is static furniture; only the value is ever redrawn."""
-        def paint(d, f, b, v):
-            col = color(f, b) if color else self.t.ink
-            widgets.text(d, x, y + 12, self._drawn.get(key), v,
-                         scale=2, color=col, bg=self.t.ground)
-        return paint
+    # -- painters ----------------------------------------------------------
 
-    def _fault(self, d, f, b, v):
-        # The banner is a filled block, not text, so it has to be cleared
-        # explicitly when the fault goes away - otherwise it stays on the
-        # glass after the ESC has recovered, which is worse than never
-        # showing it.
+    def _paint_rail(self, d, f, b, v):
+        t = self.t
+        d.fill_rectangle(RAIL_X, RAIL_TOP, RAIL_W, RAIL_BOT - RAIL_TOP, t.track)
+        if v > 0:
+            d.fill_rectangle(RAIL_X, RAIL_BOT - v, RAIL_W, v, t.accent)
+
+    def _paint_speed(self, d, f, b, v):
+        widgets.text(d, SPEED_X, SPEED_Y, self._drawn.get("speed"), v,
+                     scale=HERO_XL, color=self.t.ink, bg=self.t.ground)
+
+    def _paint_flow(self, d, f, b, v):
+        t = self.t
+        mid = W // 2
+        d.fill_rectangle(SPEED_X, FLOW_Y, W - 2 * SPEED_X, FLOW_H, t.track)
+        if v > 0:
+            d.fill_rectangle(mid, FLOW_Y, int(v), FLOW_H, t.warn)
+        elif v < 0:
+            d.fill_rectangle(mid + int(v), FLOW_Y, int(-v), FLOW_H, t.accent)
+        d.fill_rectangle(mid - 1, FLOW_Y - 3, 2, FLOW_H + 6, t.ink)
+
+    def _paint_batt(self, d, f, b, v):
+        t = self.t
+        segs, gap = 14, 3
+        span = W - 2 * SPEED_X
+        sw = (span - gap * (segs - 1)) // segs
+        for i in range(segs):
+            lit = (i / float(segs)) < v
+            d.fill_rectangle(SPEED_X + i * (sw + gap), BATT_Y, sw, BATT_H,
+                             t.soc_color(v) if lit else t.track)
+
+    def _paint_gear(self, d, f, b, v):
+        t = self.t
+        d.fill_rectangle(W - 40, 26, 26, 22, t.ground)
+        d.set_color(t.accent, t.ground)
+        d.set_pos(W - 34, 30)
+        d.print(v, scale=VALUE)
+
+    def _paint_fault(self, d, f, b, v):
+        t = self.t
         if not v:
-            d.set_color(self.t.ground, self.t.ground)
-            d.fill_rectangle(0, 272, W, 24, self.t.ground)
+            d.fill_rectangle(0, H - 26, W, 26, t.ground)
             return
-        d.set_color(self.t.ink, self.t.danger)
-        d.fill_rectangle(0, 272, W, 24, self.t.danger)
-        d.set_pos(col_x(0), 280)
+        d.fill_rectangle(0, H - 26, W, 26, t.danger)
+        d.set_color(t.ink, t.danger)
+        d.set_pos(MARGIN, H - 20)
         d.print(v)
 
     # -- layout ------------------------------------------------------------
 
     def _build_regions(self):
-        hot = lambda f, b: self.t.temp_color(f.temp_fet_filtered, b.temp_derate_start)
+        span = W - 2 * SPEED_X
         return self.status_regions() + (
-            ("speed", col_x(0), 24, 150, 48, _speed, self._big_speed),
-            ("bar", col_x(0), 96, W - 2 * MARGIN, 18, self._bar_value, self._paint_bar),
-            ("volts", col_x(0), 120, W - 2 * MARGIN, 10, _volts, self._volts_line),
-            ("motor_a", col_x(0), 148, HALF, 40,
-             lambda f, b: "%4.0f" % f.avg_motor_current,
-             self._cell("motor_a", col_x(0), 148)),
-            ("batt_a", col_x(1), 148, HALF, 40,
-             lambda f, b: "%4.0f" % f.avg_input_current,
-             self._cell("batt_a", col_x(1), 148)),
-            ("fet_c", col_x(0), 208, HALF, 40,
-             lambda f, b: "%4.0f" % f.temp_fet_filtered,
-             self._cell("fet_c", col_x(0), 208, hot)),
-            ("used_ah", col_x(1), 208, HALF, 40,
-             lambda f, b: "%4.1f" % f.amp_hours,
-             self._cell("used_ah", col_x(1), 208)),
-            ("fault", 0, 272, W, 24,
-             lambda f, b: ("FAULT %d" % f.fault) if f.fault else "",
-             self._fault),
+            ("rail", RAIL_X, RAIL_TOP, RAIL_W, RAIL_BOT - RAIL_TOP,
+             lambda f, b: int(self._rail.value),
+             self._paint_rail),
+            ("speed", SPEED_X, SPEED_Y, 150, 60,
+             lambda f, b: "%2d" % round(abs(b.kph_for_erpm(f["rpm"]))),
+             self._paint_speed),
+            ("gear", W - 40, 26, 26, 22,
+             lambda f, b: str(f.get("gear", 3)), self._paint_gear),
+            ("flow", SPEED_X, FLOW_Y - 3, span, FLOW_H + 6,
+             lambda f, b: int(self._flow.value),
+             self._paint_flow),
+            ("flow_a", W - SPEED_X - 60, FLOW_Y + FLOW_H + 4, 60, 14,
+             lambda f, b: "%4.0fA" % f["avg_motor_current"],
+             self.value_painter("flow_a", W - SPEED_X - 60,
+                                FLOW_Y + FLOW_H + 4, scale=LABEL)),
+            ("batt", SPEED_X, BATT_Y, span, BATT_H,
+             lambda f, b: soc(b, f["input_voltage"], f), self._paint_batt),
+            ("pct", SPEED_X, BIG_Y, 80, 22,
+             lambda f, b: "%3d%%" % round(100 * soc(b, f["input_voltage"], f)),
+             self.value_painter("pct", SPEED_X, BIG_Y, scale=VALUE)),
+            ("range", col_x(1), BIG_Y, 86, 22,
+             lambda f, b: ("%4.0fkm" % f["s_range_km"]
+                           if f.get("s_range_km") else "  --"),
+             self.value_painter("range", col_x(1), BIG_Y, scale=VALUE)),
+            ("fet", SPEED_X, FOOT_Y, 80, 10,
+             lambda f, b: "FET %3.0f" % f["temp_fet_filtered"],
+             self.value_painter("fet", SPEED_X, FOOT_Y, scale=LABEL,
+                                color=lambda f, b, t: t.temp_color(
+                                    f["temp_fet_filtered"], b.temp_derate_start))),
+            ("volts", col_x(1), FOOT_Y, 86, 10,
+             lambda f, b: "%5.1f V" % f["input_voltage"],
+             self.value_painter("volts", col_x(1), FOOT_Y, scale=LABEL)),
+            ("fault", 0, H - 26, W, 26,
+             lambda f, b: ("FAULT %d" % f["fault"]) if f["fault"] else "",
+             self._paint_fault),
         )
-
-    def chrome(self, d):
-        """Static furniture. Painted once, then never touched again - it is
-        the part of the screen that cannot change."""
-        RegionScreen.chrome(self, d)
-        d.set_color(self.t.dim, self.t.ground)
-        d.set_pos(col_x(0) + 150, 60)
-        d.print("km/h")
-        for label, x, y in (("MOTOR A", col_x(0), 148), ("BATT A", col_x(1), 148),
-                            ("FET C", col_x(0), 208), ("USED Ah", col_x(1), 208)):
-            d.set_color(self.t.dim, self.t.ground)
-            d.set_pos(x, y)
-            d.print(label)
 
 
 def render(d, frame, board, theme=None):

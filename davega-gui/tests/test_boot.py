@@ -70,6 +70,10 @@ src = src.replace('LIFETIME_PATH = "/data/gui-lifetime.json"',
 # Force the periodic save to fire inside a short run, so the path that keeps
 # lifetime totals across a power cycle is actually exercised.
 src = src.replace("SAVE_EVERY_MS = 5 * 60 * 1000", "SAVE_EVERY_MS = 5")
+ERR = os.path.join(tempfile.gettempdir(), "gui-error-smoke.txt")
+if os.path.exists(ERR):
+    os.remove(ERR)
+src = src.replace('ERROR_PATH = "/data/gui-error.txt"', 'ERROR_PATH = %r' % ERR)
 ns = {"__name__": "start"}
 exec(compile(src, "start.py", "exec"), ns)
 
@@ -102,6 +106,18 @@ ns2 = {"__name__": "start"}
 exec(compile(src, "start.py", "exec"), ns2)
 check("holding UP stands the dash down for the stock app", len(d.calls) == 0,
       "drew %d calls" % len(d.calls))
+
+# A boot that fails must leave an explanation behind, or diagnosing it costs a
+# WebREPL session and a round trip.
+buttons.BUTTON_UP = Pin(1)
+broken = src.replace("import gui.device as device", "import gui.nonexistent as device")
+exec(compile(broken, "start.py", "exec"), {"__name__": "start"})
+check("a failed boot writes the traceback where it survives",
+      os.path.exists(ERR))
+if os.path.exists(ERR):
+    body = open(ERR).read()
+    check("and names the failure", "ImportError" in body or "Error" in body,
+          body[:60])
 
 print()
 if fails:

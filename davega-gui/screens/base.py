@@ -30,6 +30,7 @@ BODY_BOTTOM = H - FOOTER_H - 6
 ROW = 38                          # vertical rhythm for stacked values
 
 # One type scale, used the same way everywhere.
+HERO_XL = 12                      # the speed on the riding screen, and only that
 HERO = 6                          # the one number a screen is about
 PRIMARY = 3                       # a headline value
 VALUE = 2                         # a normal value
@@ -53,6 +54,7 @@ class RegionScreen:
 
     def __init__(self, theme=None, siblings=(), position=0):
         self._drawn = {}
+        self._colours = {}
         self.t = get_theme(theme)
         self.siblings = siblings
         self.position = position
@@ -105,6 +107,15 @@ class RegionScreen:
         """A full repaint shows the truth, not a tween on its way to it.
         Screens with animation snap it here."""
 
+    def on_frame(self, f, b):
+        """Called once per render, before any region is asked for its value.
+
+        Animation is stepped here, not inside a value function. A value
+        function that advances a tween is not a function of the frame: asking
+        it twice gives two answers, and re-rendering an unchanged frame moves
+        the picture.
+        """
+
     # -- helpers subclasses use -------------------------------------------
 
     def label(self, d, x, y, s):
@@ -115,8 +126,18 @@ class RegionScreen:
     def value_painter(self, key, x, y, scale=2, color=None):
         def paint(d, f, b, v):
             col = color(f, b, self.t) if color else self.t.ink
-            widgets.text(d, x, y, self._drawn.get(key), v,
-                         scale=scale, color=col, bg=self.t.ground)
+            # Regions are diffed on their text, so a value whose colour
+            # changed but whose characters did not would keep the old colour -
+            # and a field going from white to red is exactly the change that
+            # matters most. Treat a colour change as a full redraw of the
+            # field.
+            # A colour change forces the whole field to be redrawn - but the
+            # old text still has to be cleared first, or glyphs survive
+            # wherever the new value has a space.
+            forced = self._colours.get(key) != col
+            self._colours[key] = col
+            widgets.text(d, x, y, self._drawn.get(key), v, scale=scale,
+                         color=col, bg=self.t.ground, force=forced)
         return paint
 
     def cell(self, key, x, y, label):
@@ -150,10 +171,12 @@ class RegionScreen:
             d.print(v)
 
     def render(self, d, f, b, full=False):
+        self.on_frame(f, b)
         if full or not self._drawn:
             d.set_color(self.t.ink, self.t.ground)
             d.erase()
             self._drawn = {}
+            self._colours = {}
             self.on_full(f, b)
             self.chrome(d)
         for key, x, y, w, h, value_of, paint in self.regions():

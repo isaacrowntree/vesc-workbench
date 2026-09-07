@@ -82,15 +82,13 @@ test: test-py gui-test test-lisp
 test-py:
 	@cd davega-shim && python3 test_shim.py && python3 test_layout.py
 
+# Every suite runs even when an earlier one fails. Stopping at the first
+# failure hid a real layout bug behind an unrelated one for an entire session.
 gui-test:
-	@python3 davega-gui/tests/test_screens.py
-	@python3 davega-gui/tests/test_themes.py
-	@python3 davega-gui/tests/test_ui.py
-	@python3 davega-gui/tests/test_vesc.py
-	@python3 davega-gui/tests/test_input.py
-	@python3 davega-gui/tests/test_runner.py
-	@python3 davega-gui/tests/test_session.py
-	@python3 davega-gui/tests/test_boot.py
+	@fail=0; for t in screens themes ui vesc input runner session boot; do \
+	  python3 davega-gui/tests/test_$$t.py || fail=1; \
+	done; \
+	if [ $$fail -ne 0 ]; then echo "SOME GUI SUITES FAILED"; exit 1; fi
 
 gui-golden:
 	@python3 davega-gui/tests/test_screens.py --update-golden
